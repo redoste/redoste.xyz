@@ -1,0 +1,27 @@
+baseURL = "https://redoste.xyz/"
+languageCode = "en-us"
+title = "redoste"
+theme = "simple-style"
+copyright = "© 2020 redoste - [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)"
+enableRobotsTXT = true
+
+[outputs]
+	home = ["HTML"]
+	page = ["HTML"]
+	taxonomy = ["HTML"]
+	taxonomyTerm = ["HTML"]
+	section = ["HTML", "RSS"]
+
+[permalinks]
+	posts = "/:year/:month/:day/:title/"
+
+[menu]
+	[[menu.main]]
+		name = "RSS"
+		url = "/posts/index.xml"
+	[[menu.main]]
+		name = "Projects"
+		url = "/projects/"
+	[[menu.main]]
+		name = "About"
+		url = "/about/"

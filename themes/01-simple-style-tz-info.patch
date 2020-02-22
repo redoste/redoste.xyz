@@ -1,0 +1,52 @@
+diff --git layouts/_default/list.html layouts/_default/list.html
+index 978cf16..cece5da 100644
+--- layouts/_default/list.html
++++ layouts/_default/list.html
+@@ -4,7 +4,7 @@
+ </div>
+ <ul>
+   {{ range .Paginator.Pages -}}
+-  <li>{{ .Date.Format "2006-01-02 15:04" }} - <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
++  <li>{{ .Date.Format "2006-01-02 15:04 -0700" }} - <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+   {{ end -}}
+ </ul>
+ {{ template "_internal/pagination.html" . -}}
+diff --git layouts/_default/section.html layouts/_default/section.html
+index c7faf14..9dc49f4 100644
+--- layouts/_default/section.html
++++ layouts/_default/section.html
+@@ -7,7 +7,7 @@
+ </div>
+ <ul>
+   {{ range .Paginator.Pages -}}
+-  <li>{{ with .Date }}{{ .Format "2006-01-02 15:04" }} - {{ end }}<a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ with .Description }}: {{ . }}{{ end }}</li>
++  <li>{{ with .Date }}{{ .Format "2006-01-02 15:04 -0700" }} - {{ end }}<a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ with .Description }}: {{ . }}{{ end }}</li>
+   {{ end -}}
+ </ul>
+ </main>
+diff --git layouts/_default/single.html layouts/_default/single.html
+index fe6be00..6102ec0 100644
+--- layouts/_default/single.html
++++ layouts/_default/single.html
+@@ -7,7 +7,7 @@
+ </div>
+ <div class="meta">
+   {{ if .Date -}}
+-  <div>{{ .Date.Format "2006-01-02 15:04" }}</div>
++  <div>{{ .Date.Format "2006-01-02 15:04 -0700" }}</div>
+   {{ end -}}
+   {{ if .Params.tags -}}
+   <div>
+diff --git layouts/index.html layouts/index.html
+index 02cc477..cc7cc89 100644
+--- layouts/index.html
++++ layouts/index.html
+@@ -4,7 +4,7 @@
+ </div>
+ <ul>
+   {{ range (.Paginate ( where .Site.RegularPages "Type" "in" site.Params.mainSections )).Pages -}}
+-  <li>{{ .Date.Format "2006-01-02 15:04" }} - <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
++  <li>{{ .Date.Format "2006-01-02 15:04 -0700" }} - <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+   {{ end -}}
+ </ul>
+ {{ template "_internal/pagination.html" . -}}
