@@ -1,7 +1,7 @@
-diff --git layouts/_default/list.html layouts/_default/list.html
+diff --git a/layouts/_default/list.html b/layouts/_default/list.html
 index 978cf16..cece5da 100644
---- layouts/_default/list.html
-+++ layouts/_default/list.html
+--- a/layouts/_default/list.html
++++ b/layouts/_default/list.html
 @@ -4,7 +4,7 @@
  </div>
  <ul>
@@ -11,10 +11,10 @@ index 978cf16..cece5da 100644
    {{ end -}}
  </ul>
  {{ template "_internal/pagination.html" . -}}
-diff --git layouts/_default/section.html layouts/_default/section.html
+diff --git a/layouts/_default/section.html b/layouts/_default/section.html
 index c7faf14..9dc49f4 100644
---- layouts/_default/section.html
-+++ layouts/_default/section.html
+--- a/layouts/_default/section.html
++++ b/layouts/_default/section.html
 @@ -7,7 +7,7 @@
  </div>
  <ul>
@@ -24,10 +24,10 @@ index c7faf14..9dc49f4 100644
    {{ end -}}
  </ul>
  </main>
-diff --git layouts/_default/single.html layouts/_default/single.html
+diff --git a/layouts/_default/single.html b/layouts/_default/single.html
 index fe6be00..6102ec0 100644
---- layouts/_default/single.html
-+++ layouts/_default/single.html
+--- a/layouts/_default/single.html
++++ b/layouts/_default/single.html
 @@ -7,7 +7,7 @@
  </div>
  <div class="meta">
@@ -37,10 +37,10 @@ index fe6be00..6102ec0 100644
    {{ end -}}
    {{ if .Params.tags -}}
    <div>
-diff --git layouts/index.html layouts/index.html
+diff --git a/layouts/index.html b/layouts/index.html
 index 02cc477..cc7cc89 100644
---- layouts/index.html
-+++ layouts/index.html
+--- a/layouts/index.html
++++ b/layouts/index.html
 @@ -4,7 +4,7 @@
  </div>
  <ul>
