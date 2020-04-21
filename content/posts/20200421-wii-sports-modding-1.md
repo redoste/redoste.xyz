@@ -418,3 +418,6 @@ eggAudioArcPlayerMgr:Sound Archive is already opened
 # IV - Conclusion
 
 This blog post summarize how far I have been able to mod *Wii Sports*, I hope it will be useful to someone else but a least it useful for me to note my progress and maybe, one day, later, try to do something more complete.
+
+# Comments :
+**[Reddit](https://www.reddit.com/user/reDOSte/comments/g5gcao/modding_wii_sports_part_i_identifying_files_and/) or [Twitter](https://twitter.com/redoste/status/1252606484770435072)**
