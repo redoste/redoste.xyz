@@ -1,24 +1,24 @@
 ---
 title: "Modding Wii Sports : Part I : Identifying files and creating a debug output"
-date: 2020-04-04T00:00:00+02:00
-draft: true
+date: 2020-04-21T16:00:00+02:00
+draft: false
 tags:
 - Wii
 - Wii Modding
 - Wii Sports
 ---
 
-A few months ago I saw someone playing *Wii Sports* doing some Golf. This reminded me I always wanted to create custom golf tracks. After a little bit of search, I found out that nobody really did it. [Some people were asking if someone did it](https://www.reddit.com/r/WiiHacks/comments/ec5829/looking_for_wii_sports_golf_mods/) and they were a few attempts on *Wii Sport Resort* ([here](https://youtu.be/aQiqRE5HbYI), [here](https://www.reddit.com/r/WiiHacks/comments/f2lq45/fully_custom_wii_sports_golf_course/) or [here](https://www.reddit.com/r/WiiHacks/comments/f0kt3z/custom_wii_sports_golf_course_poc/)) but I found no real public source code or walkthrought of how to do your own custom golf track on the original *Wii Sports*.
+A few months ago I saw someone playing *Wii Sports* doing some Golf. This reminded me I always wanted to create custom golf tracks. After a little bit of search, I found out that nobody really did it. [Some people were asking if someone did it](https://www.reddit.com/r/WiiHacks/comments/ec5829/looking_for_wii_sports_golf_mods/) and they were a few attempts on *Wii Sport Resort* ([here](https://youtu.be/aQiqRE5HbYI), [here](https://www.reddit.com/r/WiiHacks/comments/f2lq45/fully_custom_wii_sports_golf_course/) or [here](https://www.reddit.com/r/WiiHacks/comments/f0kt3z/custom_wii_sports_golf_course_poc/)) but I found no real public source code or walkthrough of how to do your own custom golf track on the original *Wii Sports*.
 
-After strugguling for multiples weeks now I will show you my current (slow) progress and I hope I will be able to continue this series of blog posts up until a complete usable mod. The best would be an easy to use tool that allow a convertion of any 3D models into a golf course and an interface on the Wii that allow loading custom tracks from the SD card. For the moment I'm not skilled enough nor I have enough time but maybe writing blog posts will encourage me to continue...
+After struggling for multiples weeks now I will show you my current (slow) progress and I hope I will be able to continue this series of blog posts up until a complete usable mod. The best would be an easy to use tool that allow a conversion of any 3D models into a golf course and a user interface on the Wii that allow loading custom tracks from the SD card. For the moment I'm not skilled enough nor I have enough time but maybe writing blog posts will encourage me to continue...
 
 # I - Identifying existing files
 
-The first easy step was to rip the original disc. I own an original *Wii Sports* European disc, it is the second revision that have some bug patched. I used [USBLoaderGX](https://sourceforge.net/projects/usbloadergx/), it's a backup loader that allow to copy discs to an USB drive. It produce a WBFS file, it is a custom file format that only contain usefull part of the ISO, by removing all the padding an image can shrink from 4GiB to a few hundreds MiB (it, of course, depends of the game).
+The first easy step was to rip the original disc. I own an original *Wii Sports* European disc, it is the second revision that have some bug patched. I used [USBLoaderGX](https://sourceforge.net/projects/usbloadergx/), it's a backup loader that allow to copy discs to an USB drive. It produces a WBFS file, it is a custom file format that only contain useful part of the ISO, by removing all the padding an image can shrink from 4GiB to a few hundreds of MiB (it, of course, depends of the game).
 
 To extract and rebuild WBFS images I used the [*Wiimms ISO Tools* suite](https://wit.wiimm.de/).
 ```bash
-$ # We can easly extract the content of the original image
+$ # We can easily extract the content of the original image
 $ wit X RSPP01.wbfs RSPP01/
 *****  wit: Wiimms ISO Tool v3.02a r0 x86_64 - Dirk Clemens - 2020-03-07  *****
 wit: EXTRACT 1/1 WBFS:RSPP01.wbfs/#0 -> RSPP01/
@@ -28,7 +28,7 @@ $ wit CP RSPP01.modded/ RSPP01.modded.wbfs
 * COPY/SCRUB 1/1 FST:RSPP01.modded/ -> WBFS:RSPP01.modded.wbfs
 ```
 
-After a little bit of search we can identify two important things:
+After a little bit of search, we can identify two important things:
 * The `sys/main.dol` file, it is the main game binary in the [DOL format](https://wiibrew.org/wiki/DOL) (the executable format for the Wii and the GameCube)
 * The `files/Stage/RPGolScene/` folder, it contains a file per golf track. The name of most of the file is in the form `glf_course_fcX.carc` where `fc` is for *Family Computer* or *Famicom* (the Japanese version of the NES) and the number identify the number of the track it corresponds to in the [1984 *Golf* NES game](https://en.wikipedia.org/wiki/Golf_(1984_video_game)).
 ```bash
@@ -49,7 +49,7 @@ total 17M
 212K glf_course_survey.carc
 ```
 
-These `carc` files are in fact [*Yaz0*](http://wiki.tockdom.com/wiki/Yaz0) compressed [*U8*](http://wiki.tockdom.com/wiki/U8) archives. An other *Wiimms* tool suite can be used to extract these files: the [*Wiimms SZS Toolset*](https://szs.wiimm.de/).
+These `carc` files are in fact [*Yaz0*](http://wiki.tockdom.com/wiki/Yaz0) compressed [*U8*](http://wiki.tockdom.com/wiki/U8) archives. Another *Wiimms* tool suite can be used to extract these files: the [*Wiimms SZS Toolset*](https://szs.wiimm.de/).
 
 Here is the content of `glf_course_fc1.carc`:
 ```bash
@@ -72,7 +72,7 @@ size/dec  magic file or directory
 
 ## 1 - The `glf_course_fc1.kcl` file
 
-[The `kcl` file format](http://wiki.tockdom.com/wiki/KCL) is same used in the *Mario Kart Wii* game to describe the collision of a the track. We can suppose this one also describe the collision of the golf track. Using `wkclt` from the *Wiimms SZS Toolset*, we can convert the `kcl` into a simple [Wavefront `obj` file](https://en.wikipedia.org/wiki/Wavefront_.obj_file)
+[The `kcl` file format](http://wiki.tockdom.com/wiki/KCL) is the same used in the *Mario Kart Wii* game to describe the collision of a the track. We can suppose this one also describe the collision of the golf track. Using `wkclt` from the *Wiimms SZS Toolset*, we can convert the `kcl` into a simple [Wavefront `obj` file](https://en.wikipedia.org/wiki/Wavefront_.obj_file)
 ```bash
 $ wkclt DEC glf_course_fc1.kcl
 DECODE KCL:glf_course_fc1.kcl -> KCLTXT:./glf_course_fc1.obj
@@ -101,38 +101,38 @@ ENCODE KCLTXT:glf_course_fc1.obj -> KCL:./glf_course_fc1.kcl
 ```
 
 Here is what `glf_course_fc1.obj` looks like imported into Blender :
-![glf_course_fc1.obj imported in Blender](/img/19700101-wii-sports-modding-1/fc1_imported_in_blender.png)
+![glf_course_fc1.obj imported in Blender](/img/20200421-wii-sports-modding-1/fc1_imported_in_blender.png)
 
-Since `wkclt` have been tought for *Mario Kart Wii* the objects are not correctly named but they corresponds to the different kind of ground avaliable in the game (Green, Bunker, etc...) :
-![List of objects in Blender](/img/19700101-wii-sports-modding-1/fc1_imported_in_blender_objects_list.png)
+Since `wkclt` have been thought for *Mario Kart Wii* the objects are not correctly named but they correspond to the different kind of ground available in the game (Green, Bunker, etc.) :
+![List of objects in Blender](/img/20200421-wii-sports-modding-1/fc1_imported_in_blender_objects_list.png)
 
 ## 2 - The `G3D/*.brres` files
 
-The [`brres` files](http://wiki.tockdom.com/wiki/BRRES_(File_Format)) are some sort of archives that describe a 3D model. This archive is splited in sections each one reprensents a specific part of the object (Model, Texture, Animations...). Since `brres` files are common to *Mario Kart Wii* and *Super Smash Bros. Brawl*, we can use the [*BrawlBox* tool](https://github.com/libertyernie/brawltools).
+The [`brres` files](http://wiki.tockdom.com/wiki/BRRES_(File_Format)) are some sort of archives that describe a 3D model. This archive is split in sections each one represents a specific part of the object (Model, Texture, Animations...). Since `brres` files are common to *Mario Kart Wii* and *Super Smash Bros. Brawl*, we can use the [*BrawlBox* tool](https://github.com/libertyernie/brawltools).
 
-*BrawlBox* is a huge Windows tool that allow easy manipulation of `brres` archives and its different sections. Since I use GNU/Linux I had to do a little bit of tinkering to make *BrawlBox* with *Wine*. Installing `dotnet48` using `winetricks` seems to do the job.
+*BrawlBox* is a huge Windows tool that allow easy manipulation of `brres` archives and its different sections. Because I use GNU/Linux I had to do a little bit of tinkering to run *BrawlBox* with *Wine*. Installing `dotnet48` using `winetricks` seems to do the job.
 
 Here is what `G3D/glf_course_fc1.brres` looks like in BrawlBox :
-![glf_couse_fc1.brres opened in BrawlBox](/img/19700101-wii-sports-modding-1/fc1_course_brres.png)
+![glf_couse_fc1.brres opened in BrawlBox](/img/20200421-wii-sports-modding-1/fc1_course_brres.png)
 
-The other `brres` file: `G3D/glf_map_fc1.brres` correspond to the minimap visible in game in the bottom left corner. The map in it self is at the exact same scale as the original, it is only scaled down at the final rendering, making the creation of the map from the original course really easy.
+The other `brres` file: `G3D/glf_map_fc1.brres` corresponds to the minimap visible in game in the bottom left corner. The map in it self is at the exact same scale as the original, it is only scaled down at the final rendering, making the creation of the map from the original course really easy.
 
 Here is what `G3D/glf_map_fc1.brres` looks like in BrawlBox :
-![glf_map_fc1.brres opened in BrawlBox](/img/19700101-wii-sports-modding-1/fc1_map_brres.png)
+![glf_map_fc1.brres opened in BrawlBox](/img/20200421-wii-sports-modding-1/fc1_map_brres.png)
 
 ## 3 - The `glf_scene_fc1/*.p*` files
 
-These three files seems to be used to polish the rendering of the map but I was able to identify only one of them. The `plight` file seems to match the [BLIGHT format](http://wiki.tockdom.com/wiki/BLIGHT_(File_Format)) since its magic number is the same (`LGHT`). However leaving the folder empty seems to do the trick since the map load without any problem.
+These three files seem to be used to polish the rendering of the map, but I was able to identify only one of them. The `plight` file seems to match the [BLIGHT format](http://wiki.tockdom.com/wiki/BLIGHT_(File_Format)) since its magic number is the same (`LGHT`). However leaving the folder empty seems to do the trick since the map loads without any problem.
 
 ## 4 - The `glf_course_fc1.pmp` file
 
-I was unable to clearly identify the format of the `pmp` file but I think it contains things such as the starting point, the ending point of the course and the position of trees. Its format should be simillar to the [KMP format of *Mario Kart Wii*](http://wiki.tockdom.com/wiki/KMP_(File_Format)) since it is its purpose.
+I was unable to clearly identify the format of the `pmp` file but I think it contains things such as the starting point, the ending point of the course and the position of trees. Its format should be similar to the [KMP format of *Mario Kart Wii*](http://wiki.tockdom.com/wiki/KMP_(File_Format)) since it is its purpose.
 
 ## 5 - Demo
 
 The first easy demo I can do is making the map flat. For this I converted the KCL file to an OBJ file and set the Y value of every vertices to 0.
 
-Then I used the scripting feature of BrawlBox to export every objects vertices from the model, the script is based on the builtin one made to export textures.
+Then I used the scripting feature of BrawlBox to export every objects vertices from the model. The script is based on the builtin one made to export textures.
 
 ```python
 # Script to export or import objects vertices from brres files
@@ -159,7 +159,7 @@ else:
 	bboxapi.ShowMessage('Cannot find Root Node (is a file open?)','Error')
 ```
 
-Then I made a (extremly ugly and unreadable) Python script to flatten the object before reimporting them to the `brres`.
+Then I made a (extremely ugly and unreadable) Python script to flatten the object before reimporting them to the `brres`.
 
 ```python
 import struct
@@ -186,7 +186,7 @@ n_vec       = struct.unpack(">H", inf.read(2))[0]
 min_x, min_y, min_z = struct.unpack(">fff", inf.read(12))
 max_x, max_y, max_z = struct.unpack(">fff", inf.read(12))
 
-# Check and write header
+# Check and write the header
 wo(struct.pack(">I", file_length))
 wo(struct.pack(">I", mdl0_offset))
 wo(struct.pack(">I", data_offset))
@@ -240,16 +240,16 @@ for _ in range(file_length - wo_offset):
 sys.stderr.buffer.flush()
 ```
 
-After packing everything back up, we can rebuild the game image and admire this amazing flat golf course with flying tree, starting point and ending point !
+After packing everything back up, we can rebuild the game image and admire this amazing flat golf course with flying trees, starting point and ending point !
 
-![Screenshot of the first golf course but flat 1](/img/19700101-wii-sports-modding-1/fc1_flat_screenshot_1.png)
-![Screenshot of the first golf course but flat 2](/img/19700101-wii-sports-modding-1/fc1_flat_screenshot_2.png)
+![Screenshot of the first golf course but flat 1](/img/20200421-wii-sports-modding-1/fc1_flat_screenshot_1.png)
+![Screenshot of the first golf course but flat 2](/img/20200421-wii-sports-modding-1/fc1_flat_screenshot_2.png)
 
 # II - Reverse-engineering the binary
 
-The main game binary is in the [DOL format](https://wiibrew.org/wiki/DOL), it's a pretty simple format and was able to open it in Ghidra pretty easly. I'm far from being skilled enough to completly reverse-engineer the complete binary but using simple string searches and X-refs I was able to identify important functions : reading files, reading archives, loading maps and I think I even identified the one responsible of parsing the unknown `pmp` file.
+The main game binary is in the [DOL format](https://wiibrew.org/wiki/DOL), it's a pretty simple format and was able to open it in Ghidra pretty easily. I'm far from being skilled enough to completely reverse-engineer the binary but using simple string searches and X-refs I was able to identify important functions : reading files, reading archives, loading maps and I think I even identified the one responsible of parsing the unknown `pmp` file.
 
-Here is the list of function identified (for the second european version I own : `sha1sum main.dol : 0328a87d999995f95592f91c8d948d9995bb06bd`)
+Here is the list of function identified (for the second European version I own : `sha1sum main.dol : 0328a87d999995f95592f91c8d948d9995bb06bd`)
 
 * `crash` : `0x8010ab58`
 * `get_lang_code` : `0x80186410`
@@ -268,7 +268,7 @@ Here is the list of function identified (for the second european version I own :
 * `sprintf` : `0x802aaf00`
 * `strcat` : `0x800b8e40`
 
-What made the process really hard and sometimes impossible for me is that I don't know a lot PowerPC assembly so I generaly blidly trusted Ghidra decompiller and only looked at the manual when required but most importantly this is C++ code, so we have to deal with all the C++ annoying stuff. To make this thing event more hard, Nintendo should use some weird custom compiler because it uses `r13` to store the `this` pointer instead of using the first function argument like any other compilers but most importantly `r13` point to the **end** of the structure ! Ghidra doesn't seems to support looking at structure from the end and having to subtract offsets from the pointer so it just decompile it to unreadable garbage pointer arithmetic.
+What made the process really hard and sometimes impossible for me is that I don't know a lot PowerPC assembly so I generally blindly trusted Ghidra decompiler and only looked at the manual when required but most importantly this is C++ code, so we have to deal with all the C++ annoying stuff. To make this thing even more hard, Nintendo should use some weird custom compiler because it uses `r13` to store the `this` pointer instead of using the first function argument like any other compilers but most importantly `r13` point to the **end** of the structure ! Ghidra doesn't seem to support looking at structure from the end and having to subtract offsets from the pointer so it just decompiles it to unreadable garbage pointer arithmetic.
 
 Here is my favorite one (from `golf_get_fc_string`) :
 ```c
@@ -279,7 +279,7 @@ To finish this part on a positive note, some of the code is shared with *Mario K
 
 # III - Adding a custom debug output
 
-While working on custom maps, the game crashed, a lot. So to understand why it crashed I generaly enabled the Dolphin debugger and followed the backtrace, looking at what function it correspond in Ghidra. A lot of this crashes where due to failed `assert`s and the `assert`s called `print_serial` before calling `crash`. This `print_serial` just seems to backup some registers to locals before returing. I think they removed the debug output in the final release.
+While working on custom maps, the game crashed, a lot. So to understand why it crashed I generally enabled the Dolphin debugger and followed the backtrace, looking at what functions it corresponds in Ghidra. A lot of this crashes where due to failed `assert`s and the `assert`s called `print_serial` before calling `crash`. This `print_serial` just seems to backup some registers to locals before returning. I think they removed the debug output in the final release.
 
 ```asm
 print_serial
@@ -306,9 +306,9 @@ LAB_80184104
     blr
 ```
 
-To get this debug output working I didn't want to patch the binary since I don't know how to easly output the strings so I just modified the code of the emulator instead !
+To get this debug output working I didn't want to patch the binary since I don't know how to easily output the strings so I just modified the code of the emulator instead !
 
-Since [Dolphin is open source](https://github.com/dolphin-emu/dolphin) it was really easy. I just edited the code of the branch instruction to print strings when the destination address is the one of `print_serial`. Because `print_serial` should behave like `printf` and that the memory of the emulated console is only avaliable via functions emulataing the memory bus, the easiest thing to do was to create a simple and imcomplete `printf` implementation.
+Since [Dolphin is open source](https://github.com/dolphin-emu/dolphin), it was really easy. I edited the code of the branch instruction to print strings when the destination address is the one of `print_serial`. Because `print_serial` should behave like `printf` and that the memory of the emulated console is only available via functions emulating the memory bus, the easiest thing to do was to create a simple and incomplete `printf` implementation.
 
 ```c
 // In Source/Core/Core/PowerPC/Interpreter/Interpreter_Branch.cpp
@@ -322,7 +322,7 @@ void Interpreter::bx(UGeckoInstruction inst)
   else
     NPC = PC + SignExt26(inst.LI << 2);
 
-  // Here is my imcomplete ugly printf implementation
+  // Here is my incomplete ugly printf implementation
   if (NPC == 0x801840dc) {
     uint32_t gpr3 = PowerPC::ppcState.gpr[3];
     int r = 4;
@@ -370,7 +370,7 @@ void Interpreter::bx(UGeckoInstruction inst)
 }
 ```
 
-Because I edited the PowerPC interpreter, I had to disable the JIT but the Wii is a pretty modern console, my 7 year old Intel CPU was pretty slow while trying to interpret the 729 Mhz PowerPC CPU of the Wii. It was unusable. I was not confident while trying to interpret the JIT code so I just added a line to disable JIT on branch instruction to `print_serial` :
+Because I edited the PowerPC interpreter, I had to disable the JIT but the Wii is a pretty modern console, my 7-year-old Intel CPU was pretty slow while trying to interpret the 729 Mhz PowerPC CPU of the Wii. It was unusable. I was not confident while trying to understand the JIT code so I just added a line to disable JIT on branch instruction to `print_serial` :
 
 ```c
 // In Source/Core/Core/PowerPC/Jit64/Jit_Branch.cpp
@@ -382,7 +382,7 @@ void Jit64::bx(UGeckoInstruction inst)
 }
 ```
 
-There are some slowdowns when the game try to print a lot of stuff but at least it works !
+There are some slowdowns when the game tries to print a lot of stuff but at least it works !
 
 ```markdown
 << RVL_SDK - EXI 	release build: Nov 30 2006 03:26:56 (0x4199_60831) >>
@@ -417,4 +417,4 @@ eggAudioArcPlayerMgr:Sound Archive is already opened
 
 # IV - Conclusion
 
-This blog post summurize how far I have been able to mod *Wii Sports*, I hope it will be usefull to someone else but a least it usefull for me to not my progress and maybe, one day, later, try to do something more complete.
+This blog post summarize how far I have been able to mod *Wii Sports*, I hope it will be useful to someone else but a least it useful for me to note my progress and maybe, one day, later, try to do something more complete.
