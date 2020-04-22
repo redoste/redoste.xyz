@@ -275,6 +275,21 @@ Here is my favorite one (from `golf_get_fc_string`) :
 return (&PTR_s_fc1_803e1fe0)[*(int *)(*(int *)((int)local_r13_-1 + -0x5abc) + 0x98) * 9];
 ```
 
+---
+
+**Edit : 2020-04-22 23:20 +0200 :** [u/Leseratte10 mentioned on reddit](https://www.reddit.com/r/WiiHacks/comments/g5nl9j/just_finished_to_write_my_first_blog_post_on_wii/fo5up0d) that `r13` is used for the *Small Data Area*. Because PowerPC is a [RISC](https://en.wikipedia.org/wiki/Reduced_instruction_set_computer) architecture there is a really small number of instructions, something as simple as accessing a global variable can take 2 instructions. To compensate, the compiler put all frequently accessed globals in this *Small Data Area* (here it is 64KiB large) and makes `r13` constant by initialising it in the entry point function. Now globals in the *Small Data Area* can be accessed with only one instruction.
+
+This problem was already discussed in a [Ghidra Github issue](https://github.com/NationalSecurityAgency/ghidra/issues/325). After installing a [custom language definition for the *Gekko* and *Broadway* CPUs](https://github.com/aldelaro5/ghidra-gekko-broadway-lang) and reanalysing the whole binary, the `r13` register is now considered constant. Using the *Register Manager* of Ghidra, we can set the value of `r13` (here it is `0x804df900`) and now decompilation makes way more sense.
+
+Here is the previous snippet of `golf_get_fc_string` correctly decompiled :
+```c
+return (&PTR_DAT_803e1fe0)[*(int *)(DAT_804d9e44 + 0x98) * 9];
+```
+
+The `this` pointer is correctly passed as the first argument of functions (via `r3`).
+
+---
+
 To finish this part on a positive note, some of the code is shared with *Mario Kart Wii* (yes, again) so here is this amazing decompilation project of *Mario Kart Wii* by *riidefi* that helped me a lot : [https://github.com/riidefi/MKWDecompilation](https://github.com/riidefi/MKWDecompilation)
 
 # III - Adding a custom debug output
