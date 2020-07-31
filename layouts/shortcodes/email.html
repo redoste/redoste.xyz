@@ -1,0 +1,21 @@
+<span id="email-button-span">
+	<button onclick="showEmail()">Show</button>
+</span>
+<script>
+// This is a pretty dumb way to hide the address but I don't want something CPU intensive and this should be enough to fool bots
+function showEmail(){
+	var span = document.querySelector("#email-button-span");
+	span.innerHTML = "<code>Please wait 2 seconds...</code>";
+	setTimeout(function(){
+		var splited_domain = window.location.hostname.split(".");
+		var sd_len = splited_domain.length;
+		var username = splited_domain[sd_len - 2];
+		var domain = splited_domain[sd_len - 2] + "." + splited_domain[sd_len - 1];
+		var email = username + "@" + domain;
+		span.innerHTML = "";
+		var code = document.createElement("code");
+		code.textContent = email
+		span.appendChild(code);
+	}, 2000);
+}
+</script>
