@@ -5,6 +5,10 @@ theme = "simple-style"
 copyright = "© 2020 redoste - [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/)"
 enableRobotsTXT = true
 
+[params]
+	showThemeInfo = true
+	dateFormat = "2006-01-02 15:04 +0700"
+
 [outputs]
 	home = ["HTML"]
 	page = ["HTML"]

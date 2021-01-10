@@ -1,0 +1,22 @@
+diff --git a/layouts/_default/single.html b/layouts/_default/single.html
+index b407510..f245146 100644
+--- a/layouts/_default/single.html
++++ b/layouts/_default/single.html
+@@ -5,9 +5,6 @@
+   <h2>{{ . }}</h2>
+   {{ end -}}
+ </div>
+-<div style="position: fixed; right:-30px; max-width:300px; overflow:auto; top: 1px; width: 300px; bottom:100px">
+-{{ partial "search.html" . }}
+-</div>
+ <div class="meta">
+   {{ if .Date -}}
+   <div>{{ .Date.Format (.Site.Params.dateFormat | default "2006-01-02 15:04") }}</div>
+@@ -27,7 +24,4 @@
+ <div class="content">
+   {{ .Content -}}
+ </div>
+-<div style="position: fixed; right:50px; max-width:255px; overflow:auto; top: 120px; width: 220px; bottom:90px">
+-{{ partial "toc.html" . }}
+-</div>
+ {{ end -}}
