@@ -12,7 +12,6 @@ opensource software and all this weird stuff.
 
 * [**Twitter**](https://twitter.com/redoste/)
 * [**Github**](https://github.com/redoste)
-* [**Matrix**](https://matrix.to/#/@redoste:redoste.xyz)
 * **Discord** : `@redoste#7441`
 * **E-Mail** : {{< email >}}
 
