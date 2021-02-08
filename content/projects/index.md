@@ -3,36 +3,18 @@ title: "Projects"
 draft: false
 ---
 
-### INEPLEM
+### fx-CG50 Manager PLUS - gdbserver
 
-A complete toolkit i made to exploit [*iTalc*](https://github.com/iTALC/italc/)
-from the student side.
+A GDB Remote Serial Protocol implementation that hooks to
+[fx-CG50 Manager PLUS](https://edu.casio.com/products/classroom/fxcgm_plus/)
+allowing to debug code running on the emulated calculator.
 
-I will probably make a second version under the name *VNEPLEM* to make something
-more modern and versatile with the support of [*Veyon*](https://veyon.io/)
-instead of *iTalc*.
+It can be used to debug add-ins as well as to help reverse-engineer CASIOWIN.
+Be aware that the emulator is far from being 100% accurate and the firmware is
+different from the one found on real hardware.
 
-[HERE](https://github.com/redoste/INEPLEM)
+[HERE](https://github.com/redoste/fx-CG50_Manager_PLUS-gdbserver)
 
-### wifi_icon
+### Older projects
 
-Just a simple python script I used in my old dotfiles to show the strenght of
-the wifi signal using a Gtk `StatusIcon`.
-
-[HERE](https://github.com/redoste/wifi_icon)
-
-# Old bad and ugly projects, STOP SCROLLING
-### Streamcleaner
-
-An old, probably broken, bookmarklet that allowed to get the direct link to
-videos on some video hosting platforms. If you want something usable and more
-reliable, use [youtube-dl](https://ytdl-org.github.io/youtube-dl/index.html).
-
-[HERE](https://github.com/redoste/StreamCleaner)
-
-### [FR] WACH
-
-Un (très vieux) projet... Un simple bookmarklet qui permettait de tricher sur
-le site *WebAllemand*.
-
-[HERE](https://github.com/redoste/wach)
+Older projects can be found archived on my [Github](https://github.com/redoste?tab=repositories)
