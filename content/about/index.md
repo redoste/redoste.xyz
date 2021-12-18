@@ -5,8 +5,9 @@ draft: false
 
 Hello 👋 !
 
-I'm *redoste*, a bored french high schooler interested in information security,
-opensource software and all this weird stuff.
+I'm *redoste* (any pronouns),
+
+a bored french student interested in information security, opensource software and all this weird stuff.
 
 # Contact
 
