@@ -1,0 +1,12 @@
+name = "Bare Html Dark"
+license = "Unlicense"
+licenselink = "https://github.com/redoste/redoste.xyz/tree/master/themes/bare-html-dark/UNLICENSE"
+description = "A simple dark theme with a minimal amount of CSS"
+homepage = "https://github.com/redoste/redoste.xyz/tree/master/themes/bare-html-dark/"
+tags = []
+features = []
+min_version = "0.41.0"
+
+[author]
+  name = "redoste"
+  homepage = "https://redoste.xyz/"

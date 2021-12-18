@@ -1,0 +1,18 @@
+{{ define "main" }}
+	<h2>{{ .Title }}</h2>
+	{{ if .Date }}<span class="date">{{ .Date.Format .Site.Params.dateFormat }}</span>{{ end }}
+
+	{{ if .Params.tags }}
+	<hr/>
+	<nav>
+		<ul>
+			{{ range .Params.tags }}
+				<li><a href="{{ ($.Site.GetPage (print "/tags/" (. | urlize))).RelPermalink }}">{{ . }}</a></li>
+			{{ end }}
+		</ul>
+	</nav>
+	{{ end }}
+
+	<hr/>
+	{{ .Content }}
+{{ end }}

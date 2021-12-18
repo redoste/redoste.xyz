@@ -1,0 +1,7 @@
+{{ define "main" }}
+	<ul>
+		{{ range ( where .Site.RegularPages "Type" "in" site.Params.mainSections ) }}
+			<li>{{ .Date.Format .Site.Params.dateFormat }} - <a href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+		{{ end }}
+	</ul>
+{{ end }}

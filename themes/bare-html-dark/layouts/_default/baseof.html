@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode }}">
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<title>{{ if not .IsHome }}{{ .Title }} - {{ end }}{{ .Site.Title }}</title>
+		<link rel="stylesheet" type="text/css" href="{{ "/css/main.css" | relURL }}">
+	</head>
+	<body>
+		<header>
+			<a href="{{ .Site.BaseURL }}"><h2>{{ .Site.Title }}</h2></a>
+			<nav>
+				<ul>
+					{{ range .Site.Menus.main }}
+						<li><a href="{{ .URL }}">{{ .Name }}</a></li>
+					{{ end }}
+				</ul>
+			</nav>
+		</header>
+
+		<hr/>
+		<main>
+			{{ block "main" . }}{{ end }}
+		</main>
+
+		<hr/>
+		<footer>
+			{{ .Site.Copyright | markdownify }}
+		</footer>
+	</body>
+</html>

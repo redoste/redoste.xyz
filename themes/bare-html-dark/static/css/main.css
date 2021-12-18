@@ -1,0 +1,32 @@
+body {
+	background-color: #101010;
+	color:#f8f8f8;
+}
+
+pre {
+	background-color:#282828;
+	overflow: auto;
+}
+
+.date {
+	font-family: monospace;
+}
+
+a {
+	color: #9292ff;
+}
+
+nav > ul > li {
+	display: inline;
+}
+
+img {
+	display: block;
+	margin: auto auto;
+	max-width: 75%;
+}
+
+blockquote {
+	border-left: solid 5px #aaaaaa;
+	padding-left: 10px;
+}
