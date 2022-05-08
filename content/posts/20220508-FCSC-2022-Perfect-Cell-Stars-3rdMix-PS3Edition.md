@@ -197,7 +197,7 @@ So let's rebuild RPCS3 with `-g` or with some dumping code in here ? Well let's 
 * **Vulkan SDK** 1.2.198+ (See "Install the SDK" here)
 * SDL2 (for the FAudio backend)
 
-Vulkan SDK doesn't sound fun to deal with so let's try an other route for now. (To be honest it might be fine but when it's not as easy as just installing a `-devel` package, I will first try other solutions - and the tarball is 220MB or 1.1GB extracted (which doesn't feel like a lot after solving [More Hello](data:text/plain,TBD))).
+Vulkan SDK doesn't sound fun to deal with so let's try an other route for now. (To be honest it might be fine but when it's not as easy as just installing a `-devel` package, I will first try other solutions - and the tarball is 220MB or 1.1GB extracted (which doesn't feel like a lot after solving [More Hello](https://redoste.xyz/2022/05/08/fr-write-up-fcsc-2022-more-hello/))).
 
 We've got one last option, there is a memory viewer, I have huge vertical secondary screen and the important part is about 6400 bytes. Well I just copy pasted the hex values in a file. Two times because of course the first time I missed some.
 
