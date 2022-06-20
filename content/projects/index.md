@@ -3,6 +3,12 @@ title: "Projects"
 draft: false
 ---
 
+### SSPPU
+
+A simple soft CPU in VHDL designed to run on the Basys 3 FPGA development board.
+
+[HERE](https://github.com/redoste/ssppu)
+
 ### fx-CG50 Manager PLUS - gdbserver
 
 A GDB Remote Serial Protocol implementation that hooks to
