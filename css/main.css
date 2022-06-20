@@ -18,6 +18,7 @@ a {
 
 nav > ul > li {
 	display: inline;
+	margin-right: 0.3em;
 }
 
 img {
