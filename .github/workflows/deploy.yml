@@ -30,8 +30,8 @@ jobs:
       run: |
         git checkout gh-pages
         git clean -fdx
-        mv ../public/* .
-        rm -rv ../public/
+        rsync --archive --verbose --checksum ../public/ .
+        rm -r ../public/
         git add .
         git config user.name "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
