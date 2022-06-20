@@ -1,0 +1,668 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up UIUCTF 2021 : ropfuscated - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=https://redoste.xyz/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up UIUCTF 2021 : ropfuscated</h2><span class=date>2021-08-03 00:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/uiuctf/>UIUCTF</a></li><li><a href=/tags/uiuctf-2021/>UIUCTF 2021</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>ropfuscated</em> is composed of a single but huge (4.1MiB, that&rsquo;s about half of the Linux kernel installed on my laptop) x86-64 Linux binary.
+Running it for the first time, we are greated by a message asking us to draw a patern with the mouse in a way that mimic the Android lockscreen.
+Some ANSI terminal magic allows the program to follow the mouse and draw the pattern with tildes. After releasing the left click, the program checks the pattern and awnsers <code>Sorry, try again!</code>.</p><p>Throwing the executable into Ghidra reveals next to nothing, there is a <code>main()</code> function that initialize the terminal stuff and then a simple function <code>rop()</code> is called :</p><pre tabindex=0><code>         rop
+00401310 LEA        RSP,[rop_chain]
+00401318 RET
+</code></pre><p>That&rsquo;s where the fun part begins, all the logic of the program is made using a rop chain. The stack is now hardcoded and tons of return pointers will be poped for executing gadgets. This is like programming in the weirdest instruction set you can think of.</p><p>We can extract the rop chain by first determining its size, with a quick look at the end of the <code>.data</code> section we can determine where all zeroes begin and the rop chain ends. It&rsquo;s then trivial to extract the 2.6MiB of return addresses.</p><h1 id=ii---extracting-gadgets-and-building-the-pseudocode>II - Extracting gadgets and building the pseudocode</h1><p>First we&rsquo;ll determine the list of gadgets used by the rop chain. For that I wanted to differentiate the data from the pointers to code. It&rsquo;s easly done by a python script with the sections of the ELF hardcoded :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>import</span> struct
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>text_start <span style=color:#f92672>=</span> <span style=color:#ae81ff>0x04010c0</span>
+</span></span><span style=display:flex><span>text_end <span style=color:#f92672>=</span> text_start <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x0395</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>data_start <span style=color:#f92672>=</span> <span style=color:#ae81ff>0x0404060</span>
+</span></span><span style=display:flex><span>data_end <span style=color:#f92672>=</span> data_start <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x0410010</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>with</span> open(<span style=color:#e6db74>&#34;rop_chain&#34;</span>, <span style=color:#e6db74>&#34;rb&#34;</span>) <span style=color:#66d9ef>as</span> f:
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> <span style=color:#66d9ef>True</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>try</span>:
+</span></span><span style=display:flex><span>            addr <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;&lt;Q&#34;</span>, f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>8</span>))[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>except</span> struct<span style=color:#f92672>.</span>error:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>break</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> addr <span style=color:#f92672>&gt;=</span> text_start <span style=color:#f92672>and</span> addr <span style=color:#f92672>&lt;</span> text_end:
+</span></span><span style=display:flex><span>            print(<span style=color:#e6db74>&#34;gadget : 0x</span><span style=color:#e6db74>%08X</span><span style=color:#e6db74>&#34;</span> <span style=color:#f92672>%</span> addr)
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>elif</span> addr <span style=color:#f92672>&gt;=</span> data_start <span style=color:#f92672>and</span> addr <span style=color:#f92672>&lt;</span> data_end:
+</span></span><span style=display:flex><span>            print(<span style=color:#e6db74>&#34;data @ 0x</span><span style=color:#e6db74>%08X</span><span style=color:#e6db74>&#34;</span> <span style=color:#f92672>%</span> addr)
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>            print(<span style=color:#e6db74>&#34;data : 0x</span><span style=color:#e6db74>%08X</span><span style=color:#e6db74>&#34;</span> <span style=color:#f92672>%</span> addr)
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ python3 code_vs_data.py | grep gadget | sort -u | wc -l
+</span></span><span style=display:flex><span>118
+</span></span></code></pre></div><p>So we got 118 gadgets, that&rsquo;s not a lot, we can probably identify them by hand.
+For that we&rsquo;ll need the code of said gadgets, I used <code>pwntools</code> because it includes an ELF parser with an easy to use disassembler :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>from</span> pwn <span style=color:#f92672>import</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>e <span style=color:#f92672>=</span> ELF(<span style=color:#e6db74>&#34;./ropfuscated&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>while</span> <span style=color:#66d9ef>True</span>:
+</span></span><span style=display:flex><span>    g_addr <span style=color:#f92672>=</span> int(input(), <span style=color:#ae81ff>16</span>)
+</span></span><span style=display:flex><span>    s <span style=color:#f92672>=</span> e<span style=color:#f92672>.</span>disasm(g_addr, <span style=color:#ae81ff>128</span>)<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;ret    </span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> len(s) <span style=color:#f92672>&lt;=</span> <span style=color:#ae81ff>1</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>raise</span> <span style=color:#a6e22e>Exception</span>(<span style=color:#e6db74>&#34;ret not found !&#34;</span>)
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;Gadget @ 0x</span><span style=color:#e6db74>%08X</span><span style=color:#e6db74> : &#34;</span> <span style=color:#f92672>%</span> g_addr, end<span style=color:#f92672>=</span><span style=color:#e6db74>&#34;&#34;</span>)
+</span></span><span style=display:flex><span>    d <span style=color:#f92672>=</span> s[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>+</span> <span style=color:#e6db74>&#34;ret&#34;</span>
+</span></span><span style=display:flex><span>    outs <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> l <span style=color:#f92672>in</span> d<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>):
+</span></span><span style=display:flex><span>        ls <span style=color:#f92672>=</span> l[len(<span style=color:#e6db74>&#34;  40132a:       c3                      &#34;</span>):]<span style=color:#f92672>.</span>strip()
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> ls <span style=color:#f92672>!=</span> <span style=color:#e6db74>&#34;&#34;</span>:
+</span></span><span style=display:flex><span>            outs <span style=color:#f92672>+=</span> ls <span style=color:#f92672>+</span> <span style=color:#e6db74>&#34;;&#34;</span>
+</span></span><span style=display:flex><span>    print(outs)
+</span></span></code></pre></div><p><code>pwntools</code> produces a disassembly meant for humans with whitespaces making it easier to read. So if you&rsquo;re wondering what&rsquo;s all those weird strings manipulations, it&rsquo;s only for dealing with that.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ python3 code_vs_data.py | grep gadget | sort -u | cut -d <span style=color:#e6db74>&#34;:&#34;</span> -f <span style=color:#ae81ff>2</span> | python3 gadget_disass.py &gt; gadgets.txt
+</span></span></code></pre></div><p>After cleaning the file, I wrote some form of pseudocode for each gadgets. It&rsquo;s not really consistent but it should be good enough for our purpose :</p><pre tabindex=0><code>Gadget @ 0x004010EF : nop;endbr64;ret;                                     # endbr64
+Gadget @ 0x004010F0 : endbr64;ret;                                         # endbr64
+Gadget @ 0x0040111E : xchg   ax, ax;ret;                                   # nop
+Gadget @ 0x00401160 : ret;                                                 # nop
+Gadget @ 0x0040118E : ret;                                                 # nop
+Gadget @ 0x0040118F : nop;ret;                                             # nop
+Gadget @ 0x00401303 : add    eax, 0xfffd57e8;dec    ecx;ret;               # eax += 0xfffd57e8 &amp;&amp; ecx--
+Gadget @ 0x0040130A : ret;                                                 # nop
+Gadget @ 0x00401313 : and    eax, 0x414070;ret;                            # eax &amp;= 0x414070
+Gadget @ 0x0040131C : ret;                                                 # nop
+Gadget @ 0x00401325 : syscall;cmp    rax, rbx;ret;                         # syscall &amp;&amp; cmp rax, rbx
+Gadget @ 0x00401326 : add    eax, 0xc3d83948;cmp    rcx, rbx;ret;          # eax += 0xc3d83948 &amp;&amp; cmp rax, rbx
+Gadget @ 0x00401327 : cmp    rax, rbx;ret;                                 # cmp rax, rbx
+Gadget @ 0x00401328 : cmp    eax, ebx;ret;                                 # cmp eax, ebx
+Gadget @ 0x0040132A : ret;                                                 # nop
+Gadget @ 0x0040132B : cmp    rcx, rbx;ret;                                 # cmp rcx, rbx
+Gadget @ 0x0040132C : cmp    ecx, ebx;ret;                                 # cmp ecx, ebx
+Gadget @ 0x0040132F : xor    rax, rax;ret;                                 # rax ^= rax
+Gadget @ 0x00401330 : xor    eax, eax;ret;                                 # eax ^= eax
+Gadget @ 0x00401331 : rol    bl, 0x48;sub    eax, ebx;ret;                 # rol bl, 0x48 &amp;&amp; eax -= ebx
+Gadget @ 0x00401334 : sub    eax, ebx;ret;                                 # eax -= ebx
+Gadget @ 0x00401336 : ret;                                                 # nop
+Gadget @ 0x00401337 : xchg   rbx, rax;ret;                                 # rbx, rax = rax, rbx
+Gadget @ 0x00401338 : xchg   ebx, eax;ret;                                 # ebx, eax = eax, ebx
+Gadget @ 0x00401339 : ret;                                                 # nop
+Gadget @ 0x0040133A : xchg   rcx, rax;ret;                                 # rcx, rax = rax, rcx
+Gadget @ 0x0040133B : xchg   ecx, eax;ret;                                 # ecx, eax = eax, ecx
+Gadget @ 0x0040133C : ret;                                                 # nop
+Gadget @ 0x0040133D : xchg   rcx, rbx;ret;                                 # rbx, rcx = rcx, rbx
+Gadget @ 0x0040133E : xchg   ecx, ebx;ret;                                 # ebx, ecx = ecx, ebx
+Gadget @ 0x00401340 : ret;                                                 # nop
+Gadget @ 0x00401341 : mov    rax, rsp;ret;                                 # rax = rsp
+Gadget @ 0x00401342 : mov    eax, esp;ret;                                 # eax = esp
+Gadget @ 0x00401344 : ret;                                                 # nop
+Gadget @ 0x0040134E : pop    rax;pop    rax;pop    rax;ret;                # rax = {pop} &amp;&amp; rax = {pop} &amp;&amp; rax = {pop}
+Gadget @ 0x00401350 : pop    rax;ret;                                      # rax = {pop}
+Gadget @ 0x00401351 : ret;                                                 # nop
+Gadget @ 0x00401352 : xchg   rsi, rax;ret;                                 # rsi, rax = rax, rsi
+Gadget @ 0x00401353 : xchg   esi, eax;ret;                                 # esi, eax = eax, esi
+Gadget @ 0x00401354 : ret;                                                 # nop
+Gadget @ 0x00401355 : mov    rcx, rax;ret;                                 # rcx = rax
+Gadget @ 0x00401357 : rol    ebx, 0x48;mov    ebx, ecx;ret;                # rol ebx, 0x48 &amp;&amp; ebx = ecx
+Gadget @ 0x00401358 : ret;                                                 # nop
+Gadget @ 0x00401359 : mov    rbx, rcx;ret;                                 # rbx = rcx
+Gadget @ 0x0040135A : mov    ebx, ecx;ret;                                 # ebx = ecx
+Gadget @ 0x0040135D : mov    rax, QWORD PTR [rbx];ret;                     # rax = *rbx
+Gadget @ 0x00401361 : mov    rbx, QWORD PTR [rax];ret;                     # rbx = *rax
+Gadget @ 0x00401363 : sbb    bl, al;mov    rcx, QWORD PTR [rax];ret;       # bl -= al (borrow) &amp;&amp; rcx = *rax
+Gadget @ 0x00401364 : ret;                                                 # nop
+Gadget @ 0x00401365 : mov    rcx, QWORD PTR [rax];ret;                     # rcx = *rax
+Gadget @ 0x00401367 : or     bl, al;mov    QWORD PTR [rax], rcx;ret;       # bl |= al &amp;&amp; *rax = rcx
+Gadget @ 0x00401368 : ret;                                                 # nop
+Gadget @ 0x00401369 : mov    QWORD PTR [rax], rcx;ret;                     # *rax = rcx
+Gadget @ 0x0040136C : ret;                                                 # nop
+Gadget @ 0x0040136D : mov    QWORD PTR [rax], rbx;ret;                     # *rax = rbx
+Gadget @ 0x00401370 : ret;                                                 # nop
+Gadget @ 0x00401371 : mov    QWORD PTR [rbx], rax;ret;                     # *rbx = rax
+Gadget @ 0x00401374 : ret;                                                 # nop
+Gadget @ 0x00401375 : sete   al;ret;                                       # al = ZF
+Gadget @ 0x00401376 : xchg   esp, eax;rol    bl, 0x48;cmove  eax, ebx;ret; # esp, eax = eax, esp &amp;&amp; rol bl, 0x48 &amp;&amp; if ZF : eax = ebx
+Gadget @ 0x00401377 : rol    bl, 0x48;cmove  eax, ebx;ret;                 # rol bl, 0x48 &amp;&amp; if ZF : eax = ebx
+Gadget @ 0x00401378 : ret;                                                 # nop
+Gadget @ 0x00401379 : cmove  rax, rbx;ret;                                 # if ZF : rax = rbx
+Gadget @ 0x0040137B : rex.R ret;ret;                                       # nop
+Gadget @ 0x0040137C : ret;                                                 # nop
+Gadget @ 0x0040137D : ret;                                                 # nop
+Gadget @ 0x0040137E : setl   al;ret;                                       # al = LESS
+Gadget @ 0x00401380 : rol    bl, 0x48;cmovl  eax, ebx;ret;                 # rol bl, 0x48 &amp;&amp; if LESS : eax = ebx
+Gadget @ 0x00401382 : cmovl  rax, rbx;ret;                                 # if LESS : rax = rbx
+Gadget @ 0x00401383 : cmovl  eax, ebx;ret;                                 # if LESS : eax = ebx
+Gadget @ 0x00401384 : rex.WR ret;ret;                                      # nop
+Gadget @ 0x00401385 : ret;                                                 # nop
+Gadget @ 0x00401386 : ret;                                                 # nop
+Gadget @ 0x00401387 : sets   al;ret;                                       # al = SIGN
+Gadget @ 0x00401389 : rol    bl, 0x48;cmovs  eax, ebx;ret;                 # rol bl, 0x48 &amp;&amp; if SIGN : eax = ebx
+Gadget @ 0x0040138A : ret;                                                 # nop
+Gadget @ 0x0040138D : rex.W ret;ret;                                       # nop
+Gadget @ 0x0040138E : ret;                                                 # nop
+Gadget @ 0x0040138F : ret;                                                 # nop
+Gadget @ 0x00401391 : xchg   edx, eax;rol    bl, 0x48;cmovb  eax, ebx;ret; # edx, eax = eax, edx &amp;&amp; rol bl, 0x48 &amp;&amp; if BELOW : eax = ebx
+Gadget @ 0x00401393 : ret;                                                 # nop
+Gadget @ 0x00401394 : cmovb  rax, rbx;ret;                                 # if BELOW : rax = rbx
+Gadget @ 0x00401396 : rex.X ret;ret;                                       # nop
+Gadget @ 0x00401398 : ret;                                                 # nop
+Gadget @ 0x0040139C : ret;                                                 # nop
+Gadget @ 0x004013A1 : ret;                                                 # nop
+Gadget @ 0x004013A5 : ret;                                                 # nop
+Gadget @ 0x004013A8 : add    eax, ebx;add    rax, rbx;ret;                 # eax += ebx &amp;&amp; rax += rbx
+Gadget @ 0x004013A9 : ret;                                                 # nop
+Gadget @ 0x004013AA : add    rax, rbx;ret;                                 # rax += rbx
+Gadget @ 0x004013AB : add    eax, ebx;ret;                                 # eax += ebx
+Gadget @ 0x004013AE : xor    rax, rbx;ret;                                 # rax ^= rbx
+Gadget @ 0x004013AF : xor    eax, ebx;ret;                                 # eax ^= ebx
+Gadget @ 0x004013B1 : ret;                                                 # nop
+Gadget @ 0x004013B4 : ret;                                                 # nop
+Gadget @ 0x004013B6 : ret;                                                 # nop
+Gadget @ 0x004013B7 : pop    rbx;ret;                                      # rbx = {pop}
+Gadget @ 0x004013B9 : pop    rcx;ret;                                      # rcx = {pop}
+Gadget @ 0x004013BA : ret;                                                 # nop
+Gadget @ 0x004013BE : ret;                                                 # nop
+Gadget @ 0x004013C0 : ret;                                                 # nop
+Gadget @ 0x004013C1 : pop    rsi;ret;                                      # rsi = {pop}
+Gadget @ 0x004013C2 : ret;                                                 # nop
+Gadget @ 0x004013C3 : pop    rdi;ret;                                      # rdi = {pop}
+Gadget @ 0x004013C4 : ret;                                                 # nop
+Gadget @ 0x004013C7 : ret;                                                 # nop
+Gadget @ 0x004013CA : ret;                                                 # nop
+Gadget @ 0x004013CC : pop    rdx;ret;                                      # rdx = {pop}
+Gadget @ 0x004013D0 : ret;                                                 # nop
+Gadget @ 0x004013D3 : ret;                                                 # nop
+Gadget @ 0x004013DF : ret;                                                 # nop
+Gadget @ 0x0040143E : pop    r13;pop    r14;pop    r15;ret;                # r13 = {pop} &amp;&amp; r14 = {pop} &amp;&amp; r15 = {pop}
+Gadget @ 0x0040143F : pop    rbp;pop    r14;pop    r15;ret;                # rbp = {pop} &amp;&amp; r14 = {pop} &amp;&amp; r15 = {pop}
+Gadget @ 0x00401444 : ret;                                                 # nop
+Gadget @ 0x00401445 : data16 nop WORD PTR cs:[rax+rax*1+0x0];endbr64;ret;  # endbr64
+Gadget @ 0x00401446 : nop    WORD PTR cs:[rax+rax*1+0x0];endbr64;ret;      # endbr64
+Gadget @ 0x00401447 : nop    DWORD PTR cs:[rax+rax*1+0x0];endbr64;ret;     # endbr64
+Gadget @ 0x00401450 : endbr64;ret;                                         # endbr64
+</code></pre><p>Now we can combine those cleaned gadgets with our previous dump of the rop chain for having some form of pseudocode :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>import</span> struct
+</span></span><span style=display:flex><span><span style=color:#f92672>import</span> sys
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>g <span style=color:#f92672>=</span> {}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>with</span> open(<span style=color:#e6db74>&#34;gadgets.txt&#34;</span>,<span style=color:#e6db74>&#34;r&#34;</span>) <span style=color:#66d9ef>as</span> g_f:
+</span></span><span style=display:flex><span>    gadgets <span style=color:#f92672>=</span> g_f<span style=color:#f92672>.</span>read()<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> l <span style=color:#f92672>in</span> gadgets:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> l <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;&#34;</span>:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>
+</span></span><span style=display:flex><span>        addr <span style=color:#f92672>=</span> int(l<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;@&#34;</span>)[<span style=color:#ae81ff>1</span>]<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;:&#34;</span>)[<span style=color:#ae81ff>0</span>]<span style=color:#f92672>.</span>strip(), <span style=color:#ae81ff>16</span>)
+</span></span><span style=display:flex><span>        dissas <span style=color:#f92672>=</span> l<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;#&#34;</span>)[<span style=color:#ae81ff>1</span>]<span style=color:#f92672>.</span>strip()
+</span></span><span style=display:flex><span>        dissas <span style=color:#f92672>=</span> [d<span style=color:#f92672>.</span>strip() <span style=color:#66d9ef>for</span> d <span style=color:#f92672>in</span> dissas<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;&amp;&amp;&#34;</span>)]
+</span></span><span style=display:flex><span>        g[addr] <span style=color:#f92672>=</span> dissas
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>stack <span style=color:#f92672>=</span> []
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>with</span> open(<span style=color:#e6db74>&#34;rop_chain.txt&#34;</span>, <span style=color:#e6db74>&#34;r&#34;</span>) <span style=color:#66d9ef>as</span> r_f:
+</span></span><span style=display:flex><span>    r_txt <span style=color:#f92672>=</span> r_f<span style=color:#f92672>.</span>read()<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> l <span style=color:#f92672>in</span> r_txt:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> l <span style=color:#f92672>==</span> <span style=color:#e6db74>&#34;&#34;</span>:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> <span style=color:#e6db74>&#34;gadget&#34;</span> <span style=color:#f92672>in</span> l:
+</span></span><span style=display:flex><span>            addr <span style=color:#f92672>=</span> int(l<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;:&#34;</span>)[<span style=color:#ae81ff>1</span>]<span style=color:#f92672>.</span>strip(), <span style=color:#ae81ff>16</span>)
+</span></span><span style=display:flex><span>            stack<span style=color:#f92672>.</span>append((<span style=color:#66d9ef>False</span>, addr))
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>            stack<span style=color:#f92672>.</span>append((<span style=color:#66d9ef>True</span>, l<span style=color:#f92672>.</span>strip()))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>current_pc <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>pop</span>():
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>global</span> current_pc
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>global</span> stack
+</span></span><span style=display:flex><span>    v <span style=color:#f92672>=</span> stack[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>    stack <span style=color:#f92672>=</span> stack[<span style=color:#ae81ff>1</span>:]
+</span></span><span style=display:flex><span>    current_pc <span style=color:#f92672>+=</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> v
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>while</span> <span style=color:#66d9ef>True</span>:
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;0x</span><span style=color:#e6db74>%08X</span><span style=color:#e6db74> : &#34;</span> <span style=color:#f92672>%</span> current_pc, end<span style=color:#f92672>=</span><span style=color:#e6db74>&#34;&#34;</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> current_pc <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xfff</span> <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>:
+</span></span><span style=display:flex><span>        print(hex(current_pc), file<span style=color:#f92672>=</span>sys<span style=color:#f92672>.</span>stderr)
+</span></span><span style=display:flex><span>    p <span style=color:#f92672>=</span> pop()
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> p[<span style=color:#ae81ff>0</span>]:
+</span></span><span style=display:flex><span>        print(p[<span style=color:#ae81ff>1</span>])
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>        d <span style=color:#f92672>=</span> g[p[<span style=color:#ae81ff>1</span>]]
+</span></span><span style=display:flex><span>        first <span style=color:#f92672>=</span> <span style=color:#66d9ef>True</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> d:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> <span style=color:#e6db74>&#34;</span><span style=color:#e6db74>{pop}</span><span style=color:#e6db74>&#34;</span> <span style=color:#f92672>in</span> i:
+</span></span><span style=display:flex><span>                a <span style=color:#f92672>=</span> pop()
+</span></span><span style=display:flex><span>                i <span style=color:#f92672>=</span> i<span style=color:#f92672>.</span>replace(<span style=color:#e6db74>&#34;</span><span style=color:#e6db74>{pop}</span><span style=color:#e6db74>&#34;</span>, <span style=color:#e6db74>f</span><span style=color:#e6db74>&#34;</span><span style=color:#e6db74>{</span>a<span style=color:#e6db74>}</span><span style=color:#e6db74>&#34;</span>)
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> first:
+</span></span><span style=display:flex><span>                print(i)
+</span></span><span style=display:flex><span>                first <span style=color:#f92672>=</span> <span style=color:#66d9ef>False</span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>                print(<span style=color:#e6db74>&#34; &#34;</span> <span style=color:#f92672>*</span> <span style=color:#ae81ff>13</span> <span style=color:#f92672>+</span> i)
+</span></span></code></pre></div><p>Okay, I admit it&rsquo;s hideous, but it&rsquo;s only for a single use and it should get the work done.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ time python3 disass_rop.py &gt; /dev/null
+</span></span><span style=display:flex><span>real	9m23.878s
+</span></span><span style=display:flex><span>user	9m22.004s
+</span></span><span style=display:flex><span>sys	0m0.067s
+</span></span></code></pre></div><p>Well not only it&rsquo;s hideous, it&rsquo;s also slow. There are probably way better ways to do this but I&rsquo;m lazy and I was doing something else when I ran this. We shouldn&rsquo;t have to reuse it anyway.
+(Notice that for the purpose of the WU I wrote to <code>/dev/null</code>, writing in a file was probably way slower).</p><p>Just for the sake of it I rewrote <code>pop</code> properly :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>pop</span>():
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>global</span> current_pc
+</span></span><span style=display:flex><span>    v <span style=color:#f92672>=</span> stack[current_pc <span style=color:#f92672>//</span> <span style=color:#ae81ff>8</span>]
+</span></span><span style=display:flex><span>    current_pc <span style=color:#f92672>+=</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> v
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ time python3 disass_rop.py &gt; /dev/null
+</span></span><span style=display:flex><span>real	0m0.599s
+</span></span><span style=display:flex><span>user	0m0.577s
+</span></span><span style=display:flex><span>sys	0m0.020s
+</span></span></code></pre></div><p>I&rsquo;m still wondering how I&rsquo;m able to solve that challenge when I don&rsquo;t even have basic algorithmic skills.</p><p>The output we got is huge (around 25k lines long) and should probably not be analyzed manually.
+The first place I went to was the few uses of the gadget with the <code>syscall</code> instruction. This is where our I/O should be handled. Only 3 syscalls are used <code>read</code>, <code>write</code> and <code>exit</code> moreover <code>read</code> and <code>write</code> always uses a buffer that is 1 byte long.
+Poking around in this mess reveal something quite interesting, the same addresses are used over and over again, it&rsquo;s like it had been compiled from an other instruction set and these addresses correspond to where the registers are stored.</p><p>We <del>should</del> could write an other disassembler, but I didn&rsquo;t want to, why not go the dynamic route ?</p><h1 id=iii---emulating-and-tracing-the-binary>III - Emulating and tracing the binary</h1><p>I used <a href=https://www.unicorn-engine.org/>Unicorn</a> for emulating the binary. Because the only real interactions the code has with the kernel are these simple syscalls, it&rsquo;s quite easy to do :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>import</span> sys
+</span></span><span style=display:flex><span><span style=color:#f92672>import</span> tty
+</span></span><span style=display:flex><span><span style=color:#f92672>from</span> unicorn <span style=color:#f92672>import</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>from</span> unicorn.x86_const <span style=color:#f92672>import</span> <span style=color:#f92672>*</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>mu <span style=color:#f92672>=</span> Uc(UC_ARCH_X86, UC_MODE_64)
+</span></span><span style=display:flex><span><span style=color:#75715e># mu.mem_map(0x004010c0, 0x00395) # text</span>
+</span></span><span style=display:flex><span>mu<span style=color:#f92672>.</span>mem_map(<span style=color:#ae81ff>0x00401000</span>, <span style=color:#ae81ff>0x01000</span>)   <span style=color:#75715e># text</span>
+</span></span><span style=display:flex><span><span style=color:#75715e># mu.mem_map(0x00404060, 0x00410010) # data</span>
+</span></span><span style=display:flex><span>mu<span style=color:#f92672>.</span>mem_map(<span style=color:#ae81ff>0x00404000</span>, <span style=color:#ae81ff>0x00411000</span>)   <span style=color:#75715e># data</span>
+</span></span><span style=display:flex><span><span style=color:#75715e># mu.mem_map(0x00814080, 0x060) # bss</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>with</span> open(<span style=color:#e6db74>&#34;ropfuscated&#34;</span>, <span style=color:#e6db74>&#34;rb&#34;</span>) <span style=color:#66d9ef>as</span> f:
+</span></span><span style=display:flex><span>    f<span style=color:#f92672>.</span>seek(<span style=color:#ae81ff>0x000010c0</span>)
+</span></span><span style=display:flex><span>    mu<span style=color:#f92672>.</span>mem_write(<span style=color:#ae81ff>0x004010c0</span>, f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>0x00395</span>))
+</span></span><span style=display:flex><span>    f<span style=color:#f92672>.</span>seek(<span style=color:#ae81ff>0x00003060</span>)
+</span></span><span style=display:flex><span>    mu<span style=color:#f92672>.</span>mem_write(<span style=color:#ae81ff>0x00404060</span>, f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>0x00410010</span>))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>log_file <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;unicorn.log&#34;</span>, <span style=color:#e6db74>&#34;w&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>hook_syscall</span>(mu, user_data):
+</span></span><span style=display:flex><span>    rax <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RAX)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> rax <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>:
+</span></span><span style=display:flex><span>        b <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>mem_read(mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RSI), <span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        sys<span style=color:#f92672>.</span>stdout<span style=color:#f92672>.</span>buffer<span style=color:#f92672>.</span>write(b)
+</span></span><span style=display:flex><span>        sys<span style=color:#f92672>.</span>stdout<span style=color:#f92672>.</span>buffer<span style=color:#f92672>.</span>flush()
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>elif</span> rax <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>:
+</span></span><span style=display:flex><span>        b <span style=color:#f92672>=</span> sys<span style=color:#f92672>.</span>stdin<span style=color:#f92672>.</span>buffer<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>        mu<span style=color:#f92672>.</span>mem_write(mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RSI), b)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>        print(<span style=color:#e6db74>&#34;syscall&#34;</span>, rax)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>hook_ret</span>(mu, address, size, user_data):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> size <span style=color:#f92672>!=</span> <span style=color:#ae81ff>1</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> mu<span style=color:#f92672>.</span>mem_read(address, <span style=color:#ae81ff>1</span>) <span style=color:#f92672>!=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\xc3</span><span style=color:#e6db74>&#34;</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    rsp <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RSP)
+</span></span><span style=display:flex><span>    rip <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RIP)
+</span></span><span style=display:flex><span>    rax <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RAX)
+</span></span><span style=display:flex><span>    rbx <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RBX)
+</span></span><span style=display:flex><span>    rcx <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RCX)
+</span></span><span style=display:flex><span>    rdx <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RDX)
+</span></span><span style=display:flex><span>    rsi <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RSI)
+</span></span><span style=display:flex><span>    rdi <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RDI)
+</span></span><span style=display:flex><span>    log_file<span style=color:#f92672>.</span>write((<span style=color:#e6db74>&#34;</span><span style=color:#e6db74>%016X</span><span style=color:#e6db74> &#34;</span> <span style=color:#f92672>*</span> <span style=color:#ae81ff>8</span> <span style=color:#f92672>%</span> (rip, rax, rbx, rcx, rdx, rsi, rdi, rsp <span style=color:#f92672>-</span> <span style=color:#ae81ff>0x00414070</span>)) <span style=color:#f92672>+</span> <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>mu<span style=color:#f92672>.</span>reg_write(UC_X86_REG_RSP, <span style=color:#ae81ff>0x00414070</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>mu<span style=color:#f92672>.</span>hook_add(UC_HOOK_INSN, hook_syscall, <span style=color:#66d9ef>None</span>, <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>0</span>, UC_X86_INS_SYSCALL)
+</span></span><span style=display:flex><span>mu<span style=color:#f92672>.</span>hook_add(UC_HOOK_CODE, hook_ret)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>tty<span style=color:#f92672>.</span>setraw(<span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>mu<span style=color:#f92672>.</span>emu_start(<span style=color:#ae81ff>0x00401318</span>, <span style=color:#ae81ff>0x402000</span>)
+</span></span></code></pre></div><p>The details about the ELF file were hardcoded after being extracted with the <code>readelf</code> tool from <code>binutils</code>. Because x86 uses pages of 4KiB, the sections had to be expanded to be aligned.</p><p>We can now run the script, painfully draw a pattern with the program running a hundred times slower and get 300MiB of traces !</p><h1 id=iv---the-length-check>IV - The length check</h1><p>I ran the emulation multiple times with different patterns, with only 1 dot in each, and used <code>vim -d</code> for diffing them. No differences between the traces stand out.
+This is when I started using traces of patterns with different lengths, now something interesting is visible at the end of the diff.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span> 0000000000401351 000000000040409C 00000000004040B4 000000000000048C 0000000000000001 0000000000404094 0000000000000001 000000000023E508
+</span></span><span style=display:flex><span> 0000000000401368 000000000040409C 0000000000404018 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E510
+</span></span><span style=display:flex><span> 00000000004013B8 000000000040409C 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E520
+</span></span><span style=display:flex><span><span style=color:#f92672>-                 0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+                 0000000000000007
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 00000000004013B8 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E560
+</span></span><span style=display:flex><span> 0000000000401374 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E568
+</span></span><span style=display:flex><span> 0000000000401351 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E578
+</span></span></code></pre></div><p>(It&rsquo;s difficult to make things stand out in markdown so I edited all the diffs to only keep the registers that are different.)</p><p>Looks like the length of the input is used in some way here. Let&rsquo;s take a look at the pseudocode between 0x23E508 and 0x23E578.</p><pre tabindex=0><code>0x0023E508 : bl -= al (borrow)
+             rcx = *rax
+0x0023E510 : rbx = (True, &#39;data @ 0x00404094&#39;)
+0x0023E520 : rax = *rbx
+0x0023E528 : rbx, rax = rax, rbx
+0x0023E530 : cmp rcx, rbx
+0x0023E538 : rax = (True, &#39;data : 0x00000000&#39;)
+0x0023E548 : al = ZF
+0x0023E550 : rbx = (True, &#39;data @ 0x00404094&#39;)
+0x0023E560 : *rbx = rax
+0x0023E568 : rax = (True, &#39;data : 0x00000000&#39;)
+0x0023E578 : rbx = (True, &#39;data @ 0x00404074&#39;)
+</code></pre><p><code>cmp rcx, rbx</code> looks interesting. When <code>rsp</code> is 0x0023E530 <code>rbx</code> is our input length and <code>rcx</code> is 0xA. Let&rsquo;s try inputting a pattern of length 10.</p><p>Running it with the emulator makes it quite obvious because now we have to wait way longer before obtaining the message of failure. We can assume the check is only performed after this comparaison when the input is 10 dot long.</p><p>To make it easier to manipulate the traces, we can reduce them by recording only after rsp hit <code>0x0023E530</code>. Simply edit the emulation script :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>log_file <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;uni_test.log&#34;</span>, <span style=color:#e6db74>&#34;w&#34;</span>)
+</span></span><span style=display:flex><span>is_recording <span style=color:#f92672>=</span> <span style=color:#66d9ef>False</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f92672>...</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>hook_ret</span>(mu, address, size, user_data):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>global</span> is_recording
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> size <span style=color:#f92672>!=</span> <span style=color:#ae81ff>1</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> mu<span style=color:#f92672>.</span>mem_read(address, <span style=color:#ae81ff>1</span>) <span style=color:#f92672>!=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\xc3</span><span style=color:#e6db74>&#34;</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    rsp <span style=color:#f92672>=</span> mu<span style=color:#f92672>.</span>reg_read(UC_X86_REG_RSP)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> rsp <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x06525A0</span>:
+</span></span><span style=display:flex><span>        is_recording <span style=color:#f92672>=</span> <span style=color:#66d9ef>True</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> <span style=color:#f92672>not</span> is_recording:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>return</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#f92672>...</span>
+</span></span></code></pre></div><h1 id=v---the-part-where-i-guess-way-to-much>V - The part where I guess way to much</h1><p>So now is the part where I guess a lot of stuff. I spent hours on this.</p><p>I will talk about the important parts because I just can&rsquo;t talk about everything I tried and even if I could, I can&rsquo;t remember and didn&rsquo;t note what was useless.</p><h2 id=vi---input-packing>V.I - Input packing</h2><p>The first easy to spot part is the &ldquo;packing&rdquo; of our inputs :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span> 0000000000401351 0000000000404074 0000000000404070 FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3C0
+</span></span><span style=display:flex><span> 0000000000401364 0000000000404074 FFFFFFFFFFA08D5C FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3C8
+</span></span><span style=display:flex><span> 0000000000401351 0000000000404094 FFFFFFFFFFA08D5C FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000001 0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5D 0000000000000001 0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5D                  0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5D                  0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000001
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  FFFFFFFFFFA08D5D FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5E FFFFFFFFFFA08D5D FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5E                  FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5E                  FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   FFFFFFFFFFA08D5D
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000003 0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D5F 0000000000000003 0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D5F                  0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D5F                  0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  FFFFFFFFFFA08D5F FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D60 FFFFFFFFFFA08D5F FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D60                  FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D60                  FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   FFFFFFFFFFA08D5F
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 0000000000401368 00000000004040B4 0000000000404094 000000000000048C 0000000000000001 00000000000005C6 0000000000000001 000000000024B4B0
+</span></span><span style=display:flex><span> 000000000040133C 000000000000048C 0000000000404094 00000000004040B4 0000000000000001 00000000000005C6 0000000000000001 000000000024B4B8
+</span></span><span style=display:flex><span> 00000000004013B8 000000000000048C 00000000004040AC 00000000004040B4 0000000000000001 00000000000005C6 0000000000000001 000000000024B4C8
+</span></span></code></pre></div><p>So it looks like our input is added to that <code>0xFFFFFFFFFFA08D5C</code> constant and incremented.</p><p>We can use grep to check that this part is repeated for each input :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ grep 000000000024B3D8 unicorn.log
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFCF05EA FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFA08D5C FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFF81811E FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFF8D5624 FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFD04FD8 FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFDA47C6 FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFC045C7 FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFCF865C FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFCB2A45 FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span><span style=display:flex><span>0000000000401351 0000000000404094 FFFFFFFFFFBC2C2F FFFFFFFFFFFFFFFF 0000000000000001 00000000000005C6 0000000000000001 000000000024B3D8
+</span></span></code></pre></div><p>So it is repeated 10 times, one per dot in our input, with different constants.</p><h2 id=vii---the-unique-check>V.II - The unique check</h2><p>So this is the part where I wasted most of my time, finding that needle in this entire farm is nearly impossible.
+I figured this out by starting my input with a 5 in one trace and not a 5 (or a 6) in the second. This is the condition for that needle to become a huge metal pillar.
+Now the trace that doesn&rsquo;t begin with a 5 is way bigger, looks like we went further in the check.</p><p>A few diff blocks before the new part, we find this block that have values we know very well :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-diff data-lang=diff><span style=display:flex><span> 0000000000401351 000000000040409C 00000000000004BD 000000000000048A 0000000000000001 0000000000404094 0000000000000001 0000000000259800
+</span></span><span style=display:flex><span> 0000000000401368 000000000040409C 0000000000000421 000000000030FA15 0000000000000001 0000000000404094 0000000000000001 0000000000259808
+</span></span><span style=display:flex><span> 0000000000401351 0000000000404094 0000000000000421 000000000030FA15 0000000000000001 0000000000404094 0000000000000001 0000000000259818
+</span></span><span style=display:flex><span><span style=color:#f92672>-                                  FFFFFFFFFFCF05EB
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  FFFFFFFFFFCF05EB
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 0000000000000000 FFFFFFFFFFCF05EB
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 0000000000000000 FFFFFFFFFFCF05EB 0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 0000000000000000 0000000000000000 0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000000 0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000000 0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 0000000000000000                  0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                 0000000000000000                  0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+                                  FFFFFFFFFFCF05F0
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  FFFFFFFFFFCF05F0
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005 FFFFFFFFFFCF05F0
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005 FFFFFFFFFFCF05F0 0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005 0000000000000005 0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000005 0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000005 0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005                  0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005                  0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 0000000000401368 0000000000404094 000000000000048A 000000000000048A 0000000000000001 0000000000404094 0000000000000001 00000000002598F0
+</span></span><span style=display:flex><span> 0000000000401339 000000000000048A 0000000000404094 000000000000048A 0000000000000001 0000000000404094 0000000000000001 00000000002598F8
+</span></span><span style=display:flex><span> 000000000040135C 000000000000048A 000000000000048A 000000000000048A 0000000000000001 0000000000404094 0000000000000001 0000000000259900
+</span></span></code></pre></div><p>Looks like our transformed input is added to 0x30FA15 and it, somehow, ended the check when we used a 5.
+Let&rsquo;s repeat what we did earlier and grep it :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ grep -n <span style=color:#ae81ff>0000000000259828</span> -A <span style=color:#ae81ff>1</span> unicorn_starts_with_5.log
+</span></span><span style=display:flex><span>333253:000000000040133C 000000000048B310 FFFFFFFFFFB74CF6 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>333254-00000000004013AD 0000000000000006 FFFFFFFFFFB74CF6 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>336557:000000000040133C 0000000000792F08 FFFFFFFFFF86D0FD 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>336558-00000000004013AD 0000000000000005 FFFFFFFFFF86D0FD 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>339861:000000000040133C 000000000030FA15 FFFFFFFFFFCF05F0 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>339862-00000000004013AD 0000000000000005 FFFFFFFFFFCF05F0 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>$ grep -n <span style=color:#ae81ff>0000000000259828</span> -A <span style=color:#ae81ff>1</span> unicorn_doesnt_start_with_5.log
+</span></span><span style=display:flex><span>333253:000000000040133C 000000000048B310 FFFFFFFFFFB74CF6 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>333254-00000000004013AD 0000000000000006 FFFFFFFFFFB74CF6 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>336557:000000000040133C 0000000000792F08 FFFFFFFFFF86D0FD 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>336558-00000000004013AD 0000000000000005 FFFFFFFFFF86D0FD 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>339861:000000000040133C 000000000030FA15 FFFFFFFFFFCF05EB 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>339862-00000000004013AD 0000000000000000 FFFFFFFFFFCF05EB 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>343165:000000000040133C 000000000002378E FFFFFFFFFFFDC874 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>343166-00000000004013AD 0000000000000002 FFFFFFFFFFFDC874 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>346469:000000000040133C 000000000006596D FFFFFFFFFFF9A69A 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>346470-00000000004013AD 0000000000000007 FFFFFFFFFFF9A69A 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>349773:000000000040133C 0000000000135198 FFFFFFFFFFECAE6C 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>349774-00000000004013AD 0000000000000004 FFFFFFFFFFECAE6C 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span><span style=display:flex><span>--
+</span></span><span style=display:flex><span>353077:000000000040133C 0000000000375CCC FFFFFFFFFFC8A334 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259828
+</span></span><span style=display:flex><span>353078-00000000004013AD 0000000000000000 FFFFFFFFFFC8A334 0000000000404094 0000000000000001 0000000000404094 0000000000000001 0000000000259830
+</span></span></code></pre></div><p>Interesting&mldr; Looking at the results it looks like our packed input (and some constants ?) are added with other constants and the program will stop checking when the result is not unique.</p><h2 id=viii---the-constants>V.III - The constants</h2><p>We now need two kinds of constants :</p><ul><li>The ones that are inserted between our inputs</li><li>The ones that unpacks our inputs</li></ul><p>Using grep on traces makes it quite trivial :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ grep FFFFFFFFFFB74CF6  unicorn.log | head -n <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFB74CF6 FFFFFFFFFFB74CF5 FFFFFFFFFFB74CF5 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>$ grep 0000000000246EC0 unicorn.log
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFB74CF6 FFFFFFFFFFB74CF5 FFFFFFFFFFB74CF5 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF86D0FD FFFFFFFFFF86D0FC FFFFFFFFFF86D0FC 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFFDC874 FFFFFFFFFFFDC873 FFFFFFFFFFFDC873 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFF9A69A FFFFFFFFFFF9A699 FFFFFFFFFFF9A699 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFECAE6C FFFFFFFFFFECAE6B FFFFFFFFFFECAE6B 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFC8A334 FFFFFFFFFFC8A333 FFFFFFFFFFC8A333 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD0C0F0 FFFFFFFFFFD0C0EF FFFFFFFFFFD0C0EF 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF984DF1 FFFFFFFFFF984DF0 FFFFFFFFFF984DF0 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD34318 FFFFFFFFFFD34317 FFFFFFFFFFD34317 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFFCBE0D FFFFFFFFFFFCBE0C FFFFFFFFFFFCBE0C 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFA4C236 FFFFFFFFFFA4C235 FFFFFFFFFFA4C235 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFFC531B FFFFFFFFFFFC531A FFFFFFFFFFFC531A 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE66F57 FFFFFFFFFFE66F56 FFFFFFFFFFE66F56 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE5E8B2 FFFFFFFFFFE5E8B1 FFFFFFFFFFE5E8B1 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFDDC62E FFFFFFFFFFDDC62D FFFFFFFFFFDDC62D 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFEE0254 FFFFFFFFFFEE0253 FFFFFFFFFFEE0253 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF92BC54 FFFFFFFFFF92BC53 FFFFFFFFFF92BC53 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFF65ECF FFFFFFFFFFF65ECE FFFFFFFFFFF65ECE 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFCDA8F7 FFFFFFFFFFCDA8F6 FFFFFFFFFFCDA8F6 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE3EEB2 FFFFFFFFFFE3EEB1 FFFFFFFFFFE3EEB1 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF978665 FFFFFFFFFF978664 FFFFFFFFFF978664 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF8D5933 FFFFFFFFFF8D5932 FFFFFFFFFF8D5932 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFEF446C FFFFFFFFFFEF446B FFFFFFFFFFEF446B 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFDB926B FFFFFFFFFFDB926A FFFFFFFFFFDB926A 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD3AF2C FFFFFFFFFFD3AF2B FFFFFFFFFFD3AF2B 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF84F415 FFFFFFFFFF84F414 FFFFFFFFFF84F414 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFC78F9D FFFFFFFFFFC78F9C FFFFFFFFFFC78F9C 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFB873A9 FFFFFFFFFFB873A8 FFFFFFFFFFB873A8 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF8E2A65 FFFFFFFFFF8E2A64 FFFFFFFFFF8E2A64 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE448C1 FFFFFFFFFFE448C0 FFFFFFFFFFE448C0 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE2A717 FFFFFFFFFFE2A716 FFFFFFFFFFE2A716 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD0B42F FFFFFFFFFFD0B42E FFFFFFFFFFD0B42E 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFFB7BA8 FFFFFFFFFFFB7BA7 FFFFFFFFFFFB7BA7 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE5E788 FFFFFFFFFFE5E787 FFFFFFFFFFE5E787 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF869AD0 FFFFFFFFFF869ACF FFFFFFFFFF869ACF 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD34331 FFFFFFFFFFD34330 FFFFFFFFFFD34330 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFAFDA36 FFFFFFFFFFAFDA35 FFFFFFFFFFAFDA35 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFA4B86D FFFFFFFFFFA4B86C FFFFFFFFFFA4B86C 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFCF06F5 FFFFFFFFFFCF06F4 FFFFFFFFFFCF06F4 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFB7934D FFFFFFFFFFB7934C FFFFFFFFFFB7934C 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFC6F2EB FFFFFFFFFFC6F2EA FFFFFFFFFFC6F2EA 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFBF96E8 FFFFFFFFFFBF96E7 FFFFFFFFFFBF96E7 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE0138E FFFFFFFFFFE0138D FFFFFFFFFFE0138D 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFABF475 FFFFFFFFFFABF474 FFFFFFFFFFABF474 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF98F0F3 FFFFFFFFFF98F0F2 FFFFFFFFFF98F0F2 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFB1F608 FFFFFFFFFFB1F607 FFFFFFFFFFB1F607 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF881780 FFFFFFFFFF88177F FFFFFFFFFF88177F 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF9AB5C2 FFFFFFFFFF9AB5C1 FFFFFFFFFF9AB5C1 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFED3CE7 FFFFFFFFFFED3CE6 FFFFFFFFFFED3CE6 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFF046A4 FFFFFFFFFFF046A3 FFFFFFFFFFF046A3 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE61E5A FFFFFFFFFFE61E59 FFFFFFFFFFE61E59 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF9C263B FFFFFFFFFF9C263A FFFFFFFFFF9C263A 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE69F2C FFFFFFFFFFE69F2B FFFFFFFFFFE69F2B 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD1A346 FFFFFFFFFFD1A345 FFFFFFFFFFD1A345 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD6E424 FFFFFFFFFFD6E423 FFFFFFFFFFD6E423 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFE1DCF1 FFFFFFFFFFE1DCF0 FFFFFFFFFFE1DCF0 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFA18DC4 FFFFFFFFFFA18DC3 FFFFFFFFFFA18DC3 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFA42D7B FFFFFFFFFFA42D7A FFFFFFFFFFA42D7A 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF88F859 FFFFFFFFFF88F858 FFFFFFFFFF88F858 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFF615FE FFFFFFFFFFF615FD FFFFFFFFFFF615FD 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFCF4A92 FFFFFFFFFFCF4A91 FFFFFFFFFFCF4A91 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF8A7906 FFFFFFFFFF8A7905 FFFFFFFFFF8A7905 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFC76188 FFFFFFFFFFC76187 FFFFFFFFFFC76187 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF95AAD9 FFFFFFFFFF95AAD8 FFFFFFFFFF95AAD8 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFC8B150 FFFFFFFFFFC8B14F FFFFFFFFFFC8B14F 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFDB4CEC FFFFFFFFFFDB4CEB FFFFFFFFFFDB4CEB 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFD08478 FFFFFFFFFFD08477 FFFFFFFFFFD08477 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF8945B4 FFFFFFFFFF8945B3 FFFFFFFFFF8945B3 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFC9E461 FFFFFFFFFFC9E460 FFFFFFFFFFC9E460 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFFA10DDC FFFFFFFFFFA10DDB FFFFFFFFFFA10DDB 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span><span style=display:flex><span>00000000004013AD FFFFFFFFFF8951C6 FFFFFFFFFF8951C5 FFFFFFFFFF8951C5 0000000000000001 0000000000000050 0000000000000001 0000000000246EC0
+</span></span></code></pre></div><p>We can repeat the same process for the other constants :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ grep 000000000048B310 unicorn.log | head -n <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>0000000000401364 0000000000407174 000000000048B310 0000000000407174 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>$ grep <span style=color:#ae81ff>0000000000243220</span> unicorn.log
+</span></span><span style=display:flex><span>0000000000401364 0000000000407174 000000000048B310 0000000000407174 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040716C 0000000000792F08 000000000040716C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407164 000000000030FA15 0000000000407164 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040715C 000000000002378E 000000000040715C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407154 000000000006596D 0000000000407154 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040714C 0000000000135198 000000000040714C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407144 0000000000375CCC 0000000000407144 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040713C 00000000005F72A3 000000000040713C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407134 00000000002F3F18 0000000000407134 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040712C 000000000067B216 000000000040712C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407124 00000000002CBCEB 0000000000407124 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040711C 00000000000341FB 000000000040711C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407114 00000000005B3DCA 0000000000407114 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040710C 000000000003ACE6 000000000040710C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407104 00000000001990AE 0000000000407104 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070FC 00000000001A1754 00000000004070FC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070F4 00000000002239D6 00000000004070F4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070EC 000000000011FDAE 00000000004070EC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070E4 00000000006D43AC 00000000004070E4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070DC 00000000007E7EE1 00000000004070DC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070D4 000000000009A133 00000000004070D4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070CC 000000000032570C 00000000004070CC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070C4 00000000001C1154 00000000004070C4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070BC 00000000006879A3 00000000004070BC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070B4 000000000072A6D4 00000000004070B4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070AC 000000000010BB95 00000000004070AC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 00000000004070A4 0000000000246D9A 00000000004070A4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040709C 00000000002C50D9 000000000040709C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407094 00000000007B0BF1 0000000000407094 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040708C 0000000000387063 000000000040708C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407084 0000000000478C5E 0000000000407084 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040707C 000000000071D5A3 000000000040707C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407074 00000000001BB740 0000000000407074 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040706C 00000000001D58EC 000000000040706C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407064 00000000002F4BD3 0000000000407064 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040705C 000000000004845C 000000000040705C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407054 00000000001A1880 0000000000407054 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040704C 0000000000796532 000000000040704C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407044 00000000002CBCD2 0000000000407044 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040703C 00000000005025CE 000000000040703C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407034 00000000005B4793 0000000000407034 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040702C 000000000030F911 000000000040702C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407024 000000000072A9DB 0000000000407024 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040701C 0000000000486CB8 000000000040701C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407014 0000000000390D1C 0000000000407014 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 000000000040700C 00000000002FB027 000000000040700C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000407004 0000000000406919 0000000000407004 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FFC 00000000001FEC79 0000000000406FFC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FF4 0000000000540B90 0000000000406FF4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FEC 0000000000670F10 0000000000406FEC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FE4 00000000004E09FA 0000000000406FE4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FDC 000000000077E888 0000000000406FDC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FD4 0000000000654A3E 0000000000406FD4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FCC 000000000012C31F 0000000000406FCC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FC4 00000000000FB95F 0000000000406FC4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FBC 000000000025B839 0000000000406FBC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FB4 000000000019E1AB 0000000000406FB4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FAC 00000000003FBA38 0000000000406FAC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406FA4 000000000063D9C7 0000000000406FA4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F9C 00000000001960D4 0000000000406F9C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F94 00000000002E5CBE 0000000000406F94 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F8C 0000000000291BE4 0000000000406F8C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F84 00000000001E2310 0000000000406F84 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F7C 00000000005E723E 0000000000406F7C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F74 00000000005BD28D 0000000000406F74 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F6C 00000000007707AD 0000000000406F6C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F64 000000000009EA03 0000000000406F64 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F5C 000000000030B572 0000000000406F5C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F54 00000000007586FD 0000000000406F54 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F4C 0000000000389E7D 0000000000406F4C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F44 00000000003079A3 0000000000406F44 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F3C 00000000006A5527 0000000000406F3C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F34 0000000000374EB1 0000000000406F34 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F2C 000000000024B314 0000000000406F2C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F24 00000000002F7B8C 0000000000406F24 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F1C 000000000034D5BA 0000000000406F1C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F14 000000000076BA51 0000000000406F14 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F0C 000000000043D3D0 0000000000406F0C 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406F04 0000000000361BA1 0000000000406F04 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406EFC 00000000005EF22A 0000000000406EFC 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span><span style=display:flex><span>0000000000401364 0000000000406EF4 000000000076AE3D 0000000000406EF4 0000000000000001 0000000000404094 0000000000000001 0000000000243220
+</span></span></code></pre></div><p>However we need to know which ones are added to our input and which ones to the constants. While looking for those constants I also tried using the pseudocode we produced earlier. It looks like the values used with our input appear two times instead of one :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ grep 48B310 rop_chain.s
+</span></span><span style=display:flex><span>0x001F35A0 : rcx = (True, &#39;data @ 0x0048B310&#39;)
+</span></span><span style=display:flex><span>$ grep 792F08 rop_chain.s
+</span></span><span style=display:flex><span>0x001F3270 : rcx = (True, &#39;data @ 0x00792F08&#39;)
+</span></span><span style=display:flex><span>$ grep 30FA15 rop_chain.s
+</span></span><span style=display:flex><span>0x001F2F30 : rax = (True, &#39;data : 0x0030FA15&#39;)
+</span></span><span style=display:flex><span>0x002036F0 : rax = (True, &#39;data : 0x0030FA15&#39;)
+</span></span><span style=display:flex><span>$ grep 5F72A3 rop_chain.s
+</span></span><span style=display:flex><span>0x001F1F50 : rax = (True, &#39;data @ 0x005F72A3&#39;)
+</span></span><span style=display:flex><span>0x002070B0 : rax = (True, &#39;data @ 0x005F72A3&#39;)
+</span></span></code></pre></div><h2 id=viv---grouping>V.IV - Grouping</h2><p>Now we need to identify the input that pass the <em>&ldquo;unique test&rdquo;</em>. First we&rsquo;ll unpack all the constants and insert our input in it :</p><pre tabindex=0><code>6, 5, X, 2, 7, 4, 0, X, 8, 7, 3, 8, 0, 1, 5, 6, 4, 2, 0, X, 2, 3, 6, 8, 7, 1, 5, 5, 6, 0, 7, 8, 1, 3, 2, 4, 8, 2, 3, 4, 0, 6, X, 5, 7, X, 1, 7, 5, 3, 2, 8, 0, 6, 3, X, 5, X, 2, 0, 4, 8, 1, 2, 8, 6, 1, 4, 3, 5, X, 0, 1, 0, 4, X, 5, X, 2, 6, 3
+</code></pre><p>Uhh, it looks like the rule we defined earlier will not work. The program probably forgets its state at one point or another, we can look at the hardcoded values to determine where it does. There are two consecutive 5s at offset 27. When thinking about 27, the first thing that came to my mind was 3*9=27, let&rsquo;s divide in groups of 9 :</p><pre tabindex=0><code>6, 5, X, 2, 7, 4, 0, X, 8
+7, 3, 8, 0, 1, 5, 6, 4, 2
+0, X, 2, 3, 6, 8, 7, 1, 5
+5, 6, 0, 7, 8, 1, 3, 2, 4
+8, 2, 3, 4, 0, 6, X, 5, 7
+X, 1, 7, 5, 3, 2, 8, 0, 6
+3, X, 5, X, 2, 0, 4, 8, 1
+2, 8, 6, 1, 4, 3, 5, X, 0
+1, 0, 4, X, 5, X, 2, 6, 3
+</code></pre><p>That looks really good, some of our inputs have two possible solutions but if you keep in mind the original situtaion, there are some moves that are impossible with a pattern.</p><h1 id=vi---conclusion>VI - Conclusion</h1><p>After using <code>1 3 4 1 4 7 6 7 8 7</code> which draws a nice flag, we get rewarded with another flag.</p><pre tabindex=0><code>Draw pattern with mouse to get flag
+
+
+
+         #         #         #
+                 ~ ~
+               ~   ~
+             ~     ~
+           ~       ~
+         # ~~~~~~~ #         #
+                   ~
+                   ~
+                   ~
+                   ~
+         # ~~~~~~~ # ~~~~~~~ #
+</code></pre><pre tabindex=0><code>uiuctf{which_shows_that_rop_is_turing_complete_QED}
+</code></pre><p>Just before I solved the challenge (at 0514 CEST on the 1st) a hint was released (at 0205 CEST) about how the challenge was built. The challenge authors used <a href=https://github.com/shinh/elvm>elvm</a>, so my first theory was right, maybe building a proper disassembler would have been faster.</p><p>In the end I spent nearly 24 hours on this challenge and wasn&rsquo;t really able to solve any other ones (except for a few really easy reverse) because I wasn&rsquo;t available the second day.</p><p>Donc gros GG à tout le reste de l&rsquo;équipe pour nous avoir propulsé aussi haut dans le classement !</p></main><hr><footer>© 2020 - 2022 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>

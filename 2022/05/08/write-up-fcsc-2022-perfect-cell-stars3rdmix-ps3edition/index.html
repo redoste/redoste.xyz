@@ -1,0 +1,399 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=https://redoste.xyz/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition</h2><span class=date>2022-05-08 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2022/>FCSC 2022</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>The description of <em>Perfect Cell</em> states that a friend of us made an homebrew for an &ldquo;amazing multiplayer fighting game&rdquo;. It&rsquo;s joined with a file with the <code>.self</code> extension.</p><p>We&rsquo;ll start with the first obvious thing</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file perfect-cell.self
+</span></span><span style=display:flex><span>perfect-cell.self: data
+</span></span></code></pre></div><p>Oh.</p><p>That&rsquo;s a good start.</p><p>Binwalk is able to find an ELF header a little bit later in the file but even after removing the first 0x90 bytes the file reamains unusable.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ binwalk -E perfect-cell.self 
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>DECIMAL       HEXADECIMAL     ENTROPY
+</span></span><span style=display:flex><span>--------------------------------------------------------------------------------
+</span></span><span style=display:flex><span>0             0x0             Falling entropy edge (0.246619)
+</span></span><span style=display:flex><span>1024          0x400           Rising entropy edge (0.973705)
+</span></span><span style=display:flex><span>1528832       0x175400        Falling entropy edge (0.181855)
+</span></span></code></pre></div><p>Well it definitly looks encrypted.</p><p>We can use the first few bytes to try to identify the file type.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ hd perfect-cell.self | head -n <span style=color:#ae81ff>2</span>
+</span></span><span style=display:flex><span>00000000  53 43 45 00 00 00 00 02  00 01 00 01 00 00 03 f0  |SCE.............|
+</span></span><span style=display:flex><span>00000010  00 00 00 00 00 00 0a 80  00 00 00 00 00 37 53 e8  |.............7S.|
+</span></span></code></pre></div><p>Searching for <code>SCE</code> seems to refer to the format <a href=https://www.psdevwiki.com/ps3/SELF_-_SPRX>Signed ELF or SELF by Sony</a>, this format was used on the PS Vita and the PS3. I&rsquo;m going to guess it&rsquo;s a PS3 homebrew.</p><p>After installing <a href=https://rpcs3.net/>RPCS3</a> and loading the file, we are greeted by an amazing title screen featuring <a href=https://en.wikipedia.org/wiki/Cell_(Dragon_Ball)>Cell</a> from Drangon Ball. Here it refers to the <a href=https://en.wikipedia.org/wiki/Cell_(microprocessor)>Cell BE</a> processor present in the PS3.</p><p><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-001.png alt="&amp;ldquo;Please connect to network shell to play&amp;rdquo; screen"></p><blockquote><p>&ldquo;Please connect to network shell to play&rdquo;</p></blockquote><p>Well it looks like it&rsquo;s waiting for an incomming connection.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ ss -tlupn
+</span></span><span style=display:flex><span>tcp     LISTEN   0        1        0.0.0.0:1337        0.0.0.0:*       users:((&#34;rpcs3&#34;,pid=4857,fd=83))
+</span></span><span style=display:flex><span>$ ncat 127.0.0.1 <span style=color:#ae81ff>1337</span>
+</span></span><span style=display:flex><span>    ____            ____          __     ______     ____
+</span></span><span style=display:flex><span>   / __ \___  _____/ __/__  _____/ /_   / ____/__  / / /
+</span></span><span style=display:flex><span>  / /_/ / _ \/ ___/ /_/ _ \/ ___/ __/  / /   / _ \/ / / 
+</span></span><span style=display:flex><span> / ____/  __/ /  / __/  __/ /__/ /_   / /___/  __/ / /  
+</span></span><span style=display:flex><span>/_/    \___/_/  /_/  \___/\___/\__/   \____/\___/_/_/   
+</span></span><span style=display:flex><span>                                                        
+</span></span><span style=display:flex><span>========================================================
+</span></span><span style=display:flex><span>Welcome to Pefect Cell!
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>Please provide a correct input ...
+</span></span><span style=display:flex><span>FCSC{AAAAA}
+</span></span><span style=display:flex><span>Please provide a correct input ...
+</span></span></code></pre></div><p><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-002.png alt="&amp;ldquo;Connected and Playing!&amp;rdquo; screen"></p><p>Now that we know how the binary behave, let&rsquo;s try to decrypt to SELF and reverse it. Looking arround I found <a href=https://www.psdevwiki.com/ps3/Dev_Tools#Break_N_Make_.28MakeSelf_.26_BreakSelf.29>BreakSelf</a> capable of doing it. After getting a clean cleartext ELF we can import it into Ghidra to look arround.</p><h1 id=ii---reversing-the-ppu-binary>II - Reversing the PPU Binary</h1><p>After analysing the binary there weren&rsquo;t a lot of code. Even after looking for the success and failure strings they didn&rsquo;t have any X-Refs. Looks like something went wrong. I tried the aggressive instruction finder but it complained that there were not enough functions (isn&rsquo;t finding new functions the goal of the AIF ?)</p><p>Let&rsquo;s look into the debugger : after enabling it in RPCS3 we get a new pane with disassembly and register views. After an awkward amount of time I understood that I needed to select a thread in the little menu on the top right to see the disassembly.</p><p>We can now select the main thread and look up in the backtrace. Since we are waiting for an incomming TCP connection on port 1337 we should be inside the accept syscall. After finding the first address that was in the address space of the homebrew I looked it up in ghidra and frantically pressed D to discover as much code as possible before relaunching an analysis.</p><p>Well now we should have enough code. Let&rsquo;s go take back a look at the strings. Still no X-Refs ?</p><p>After taking a look at the code we just disassembled, there were a lot of references to r2. This reminded me of a concept of PowerPC. The <em>Small Data Array</em> or SDA, I have already encourted it when I did some reversing on the <a href=https://redoste.xyz/2020/04/21/modding-wii-sports-part-i-identifying-files-and-creating-a-debug-output/#ii---reverse-engineering-the-binary>Wii 2 years ago</a>.</p><p>The quick version is that PowerPC is a RISC architecure and it requires multiple instrctions to load a global, so the compiler will put all the most used globals in the same area and set a register as constant for the entirety of the program. Now when the program needs to use one of those globals it can just reference it relative to the SDA register, this will only require one instruction.</p><p>Ghidra supports SDA but you need to declare it in the Register Manager. I copied the value of r2 from the debugger and declared it as constant for the entirety of the program. After a quick reanalysis all the accesses relative to r2 are decompiled as global variable accesses.</p><p><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-003.png alt="Ghidra Register Manager"></p><p>We can now follow the strings we looked at earlier. They are referenced from a function with a lot of code. We will just ignore it because it&rsquo;s probably just some calls to PS3 APIs for displaying text on the screen. An intresting part of it is the read of a global variable that will decide if the success of failure text should be shown.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>display_str</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>param_1, <span style=color:#66d9ef>int</span> param_2) {
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  puVar1 <span style=color:#f92672>=</span> PTR_WIN_STATE_WANTS_2_0021c380;
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)puVar1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    local_b0 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(undefined8 <span style=color:#f92672>*</span>)PTR_s_You_Lose<span style=color:#f92672>!</span>_0021c438;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)puVar1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>2</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    local_b0 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(undefined8 <span style=color:#f92672>*</span>)PTR_s_You_Win<span style=color:#f92672>!</span>_0021c450;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Let&rsquo;s follow the X-Refs on this one : only one function writes to it, looks like we found the intresting part.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> <span style=color:#ae81ff>6</span>;
+</span></span><span style=display:flex><span>  memcpy(processed_input, PTR_INPUT_BUFFER_0021c4c0 <span style=color:#f92672>+</span> <span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0x60</span>);
+</span></span><span style=display:flex><span>  piVar9 <span style=color:#f92672>=</span> piVar3;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>    iVar11 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>piVar9;
+</span></span><span style=display:flex><span>    syscall();
+</span></span><span style=display:flex><span>    piVar9 <span style=color:#f92672>=</span> piVar9 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (iVar11 <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>goto</span> LAB_000113c8;
+</span></span><span style=display:flex><span>    bVar1 <span style=color:#f92672>=</span> lVar4 <span style=color:#f92672>!=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    lVar4 <span style=color:#f92672>=</span> lVar4 <span style=color:#f92672>+</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>  } <span style=color:#66d9ef>while</span> (bVar1);
+</span></span><span style=display:flex><span>  piVar9 <span style=color:#f92672>=</span> piVar3 <span style=color:#f92672>+</span> <span style=color:#ae81ff>3</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#f92672>*</span>piVar9 <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      sync(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    piVar9 <span style=color:#f92672>=</span> piVar9 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>;
+</span></span><span style=display:flex><span>  } <span style=color:#66d9ef>while</span> (piVar3 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x33</span> <span style=color:#f92672>!=</span> piVar9);
+</span></span><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> memcmp(processed_input, PTR_EXPECTED_0021c4e8, <span style=color:#ae81ff>0x60</span>);
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (lVar4 <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#f92672>*</span>(undefined4 <span style=color:#f92672>*</span>)PTR_WIN_STATE_WANTS_2_0021c380 <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span></code></pre></div><p>The global is set to 2 only if the earlier function returns 0. A quick look reveals that it&rsquo;s just a <code>memcmp</code>, the input proabably goes through some transformations before getting compared to hardcoded bytes.
+The bytes that seems to be our input have been copied from an other global indexed by 5 (<code>FCSC{</code> is 5 charcters long).</p><p>Following the X-Refs once again we can see this global array was written by a loop that waits for a function to to return 0x67. It&rsquo;s probably <code>recv</code> so we should provide an input 102 characters long (-1 for the newline) to the program for the transformations to get applied.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>  buffer <span style=color:#f92672>=</span> PTR_INPUT_BUFFER_0021c4c0;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> sVar6) {
+</span></span><span style=display:flex><span>    uVar4 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>PTR_s_Please_provide_a_correct_input_._0021c4b8;
+</span></span><span style=display:flex><span>    uVar9 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(PTR_s_Please_provide_a_correct_input_._0021c4b8 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>);
+</span></span><span style=display:flex><span>    uVar10 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(PTR_s_Please_provide_a_correct_input_._0021c4b8 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x10</span>);
+</span></span><span style=display:flex><span>    uVar11 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(PTR_s_Please_provide_a_correct_input_._0021c4b8 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x18</span>);
+</span></span><span style=display:flex><span>    uVar1 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(PTR_s_Please_provide_a_correct_input_._0021c4b8 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x20</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>      <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>        local_b0 <span style=color:#f92672>=</span> uVar4;
+</span></span><span style=display:flex><span>        local_a8 <span style=color:#f92672>=</span> uVar9;
+</span></span><span style=display:flex><span>        local_a0 <span style=color:#f92672>=</span> uVar10;
+</span></span><span style=display:flex><span>        local_98 <span style=color:#f92672>=</span> uVar11;
+</span></span><span style=display:flex><span>        local_90 <span style=color:#f92672>=</span> uVar1;
+</span></span><span style=display:flex><span>        send(socket, <span style=color:#f92672>&amp;</span>local_b0, <span style=color:#ae81ff>0x23</span>, flags);
+</span></span><span style=display:flex><span>        memset(buffer, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0x800</span>);
+</span></span><span style=display:flex><span>        sVar6 <span style=color:#f92672>=</span> recv(socket, buffer, <span style=color:#ae81ff>0x7ff</span>, flags);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (sVar6 <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>1</span>) {
+</span></span><span style=display:flex><span>          <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>      } <span style=color:#66d9ef>while</span> (sVar6 <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0x67</span>);
+</span></span><span style=display:flex><span>      <span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    } <span style=color:#66d9ef>while</span> ((bVar2) <span style=color:#f92672>||</span> (puVar3[<span style=color:#ae81ff>0x65</span>] <span style=color:#f92672>!=</span> <span style=color:#e6db74>&#39;}&#39;</span>));
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> (longlong)iVar5;
+</span></span><span style=display:flex><span>  }
+</span></span></code></pre></div><p>That&rsquo;s cool : we have a whole lot of informations about the context but where is crypto ? The only other call beetween the <code>memcpy</code> and the <code>memcmp</code> is a syscall and I doubt the PS3 has a <code>mangle_flag_for_fcsc</code> syscall.</p><p>Let&rsquo;s take a look in the debugger :</p><pre tabindex=0><code>[000115d8]  44 00 00 02: sc #sys_spu_thread_write_snr
+</code></pre><p>Just reading the syscall name scared me. I knew about thoses. When I understood it was a PS3 challenge it was the only thing I didn&rsquo;t want to happen.</p><h1 id=iii---spus>III - SPUs</h1><p>The Synergistic Processing Units or SPUs are small coprocessors that were designed to handle complex calculation pipelines. They run a custom 128-bit SIMD architecture making it quite different from the usual instruction sets we deal with everyday.</p><p>This setup is very similiar from last year challenge <a href=https://redoste.xyz/2021/05/03/fr-write-up-fcsc-2021-stars2ndmix-cryptoedition/><em>Stars:2ndMix CryptoEdition</em></a> (thus the name of this write-up) but I&rsquo;m pretty confident we won&rsquo;t be able to just debug on the correct XOR and extract a key that way.</p><p>Using the debugger of RPCS3 we can see that 6 SPUs are started. Since the relevant part of the flag is 102 - 5 - 1 = 96 charcters long, each SPUs can be responsible for processing 16 charcters. Coincidentally SPUs work on 128 bits numbers, that looks like a correct assumption.</p><p>First thing first, we need to extract the code for the SPUs. Last year for <em>Stars:2ndMix CryptoEdition</em> I made a debug build of FlyCast and attached GDB on it to dump the code. However here RPCS3 is not same kind of beast.</p><p>The build provided by the developpement team is an AppImage without any debugging features enabled. I tried attaching GDB and just dumping all the process address space but it resulted in huge files that are practically unsearchable.</p><p>So let&rsquo;s rebuild RPCS3 with <code>-g</code> or with some dumping code in here ? Well let&rsquo;s take a look at <a href=https://github.com/RPCS3/rpcs3/blob/master/BUILDING.md#linux>the requirement for building RPCS3</a> :</p><ul><li>Clang 12+ or GCC 11+</li><li>CMake 3.16.9+</li><li>Qt 5.15.2</li><li><strong>Vulkan SDK</strong> 1.2.198+ (See &ldquo;Install the SDK&rdquo; here)</li><li>SDL2 (for the FAudio backend)</li></ul><p>Vulkan SDK doesn&rsquo;t sound fun to deal with so let&rsquo;s try an other route for now. (To be honest it might be fine but when it&rsquo;s not as easy as just installing a <code>-devel</code> package, I will first try other solutions - and the tarball is 220MB or 1.1GB extracted (which doesn&rsquo;t feel like a lot after solving <a href=https://redoste.xyz/2022/05/08/fr-write-up-fcsc-2022-more-hello/>More Hello</a>)).</p><p>We&rsquo;ve got one last option, there is a memory viewer, I have huge vertical secondary screen and the important part is about 6400 bytes. Well I just copy pasted the hex values in a file. Two times because of course the first time I missed some.</p><p>After unhexlifying the file we can start analysing the transformations.</p><h1 id=iv---dissassembling-spu-code>IV - Dissassembling SPU code</h1><p>A quick search on Google later, there seems to be IDA modules for disassembling SPU code, after installing <a href=https://sourceforge.net/projects/ida-spu/>this one by <em>Mr Wicked</em></a> and importing our previoulsy obtained dump at address 0 we can start looking for the functions.</p><p>We can use the debugger to follow what code each SPU is executing. All of them seem to start at the same location but after some internal magic they seem to all go to different functions.</p><pre tabindex=0><code>ROM:000001D0                 nop            r127
+ROM:000001D4                 lqr            r25, 0x1B74
+ROM:000001D8                 ila            r26, spu_list
+ROM:000001DC                 lqr            r34, xmmword_1660
+ROM:000001E0                 ilhu           r37, 0x301
+ROM:000001E4                 lqr            r31, xmmword_1650
+ROM:000001E8                 nop            r127
+ROM:000001EC                 lqd            r27, 0x30(sp)
+ROM:000001F0                 ori            r38, r37, 2
+ROM:000001F4                 lqd            r28, 0x20(sp)
+ROM:000001F8                 cdd            r32, 0(sp)
+ROM:000001FC                 rotqby         r3, r25, r13
+ROM:00000200                 cwd            r39, 0(sp)
+ROM:00000204                 stqd           r34, 0x80(sp)
+ROM:00000208                 shufb          r33, r31, r27, r32
+ROM:0000020C                 shli           r29, r3, 2
+ROM:00000210                 clgti          r30, r3, 5
+ROM:00000214                 shufb          r40, r38, r28, r39
+ROM:00000218                 a              r36, r26, r29
+ROM:0000021C                 lqx            r35, r26, r29
+ROM:00000220                 stqd           r33, 0x30(sp)
+ROM:00000224                 stqd           r40, 0x20(sp)
+ROM:00000228                 rotqby         r41, r35, r36
+ROM:0000022C                 brnz           r30, loc_2D0
+ROM:00000230                 bi             r41
+ROM:00000234 spu_list:       .int spu0               ; DATA XREF: ROM:000001D8↑o
+ROM:00000238                 .int spu1
+ROM:0000023C                 .int spu2
+ROM:00000240                 .int spu3
+ROM:00000244                 .int spu4
+ROM:00000248                 .int spu5
+</code></pre><p>This code is the last part each SPUs have in common. The address loaded in r41 is read from the array <code>spu_list</code> and indexed by the number of the current SPU.</p><p>We can define functions at each of the SPU code (here named <code>spu0</code> to <code>spu5</code>) to be able to follow the assembly in the graph view. All the functions seems pretty simple but with a lot a operations to transcribe. They all converge at some point, probably to write the modified part of the flag back to the main processor memory.</p><p>We could do all of that by hand but it seems a bit tedious, I wanted to have some kind of execution trace to refer myself to instead of having to lookup every single arithmetic instruction. So I looked for an independent SPU emulator.</p><h1 id=v---using-a-spu-emulator-to-speedup-the-reversing-process>V - Using a SPU emulator to speedup the reversing process</h1><p><a href=https://github.com/kraiskil/anergistic>anergistic</a> is an emulator developped by <a href=https://fail0verflow.com/blog/>fail0verflow</a>, a hacking group known for researching homebrew on multiple plaforms, including the PS3. Here we are using a &ldquo;modern&rdquo; fork from 2011 since the original repo was taken down.</p><p>After fixing a few lines in the Makefile for supporting python2.7 instead of python2.6, the project can be built with a simple <code>make</code>.</p><p>We can launch the emulator by passing a path to an ELF file in parameter. It seems complex to implement raw binary loading so I just wrote a simple ELF header by hand :</p><pre tabindex=0><code>$ readelf -a dumpspu.elf
+ELF Header:
+  Magic:   7f 45 4c 46 01 02 01 00 00 00 00 00 00 00 00 00 
+  Class:                             ELF32
+  Data:                              2&#39;s complement, big endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
+  Type:                              EXEC (Executable file)
+  Machine:                           None
+  Version:                           0x1
+  Entry point address:               0x420
+  Start of program headers:          52 (bytes into file)
+  Start of section headers:          0 (bytes into file)
+  Flags:                             0x0
+  Size of this header:               52 (bytes)
+  Size of program headers:           32 (bytes)
+  Number of program headers:         1
+  Size of section headers:           0 (bytes)
+  Number of section headers:         0
+  Section header string table index: 0
+
+There are no sections in this file.
+
+There are no sections to group in this file.
+
+Program Headers:
+  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align
+  LOAD           0x000054 0x00000000 0x00000000 0x01900 0x01900 RWE 0x1000
+
+There is no dynamic section in this file.
+
+There are no relocations in this file.
+
+The decoding of unwind sections for machine type None is not currently supported.
+
+Dynamic symbol information is not available for displaying symbols.
+
+No version information found in this file.
+</code></pre><p>Here the entry point is set to the beginning of the <code>spu5</code> function.</p><p>Launching the emulator seems to work but it still needs some modifictions :</p><p>First we will enable the intructions and memory accesses debugging as they will be very helpful when reading the traces.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/config.h b/config.h
+</span></span><span style=display:flex><span>index 9cd886b..87c73aa 100644
+</span></span><span style=display:flex><span><span style=color:#f92672>--- a/config.h
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/config.h
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -6,10 +6,10 @@
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span> #define CONFIG_H__
+</span></span><span style=display:flex><span> 
+</span></span><span style=display:flex><span> #define DEBUG
+</span></span><span style=display:flex><span><span style=color:#f92672>-//#define DEBUG_INSTR
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+#define DEBUG_INSTR
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> //#define DEBUG_GDB
+</span></span><span style=display:flex><span> 
+</span></span><span style=display:flex><span><span style=color:#f92672>-//#define DEBUG_INSTR_MEM
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+#define DEBUG_INSTR_MEM
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> #define DEBUG_TRACE
+</span></span><span style=display:flex><span> 
+</span></span><span style=display:flex><span> //#define FAIL_DUMP_REGS
+</span></span></code></pre></div><p>We will also set a stop address as everything after this is just resposible to write back the transformed data. I&rsquo;ve checked with RPCS3 debugger that all the SPUs finished their work when coming at this address. This will make the traces way shorter and easier to work with.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/emulate.c b/emulate.c
+</span></span><span style=display:flex><span>index a1dd5e8..c19707f 100644
+</span></span><span style=display:flex><span><span style=color:#f92672>--- a/emulate.c
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/emulate.c
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -187,6 +187,9 @@ u32 emulate(void)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	if ((ctx-&gt;pc &amp; 3) != 0)
+</span></span><span style=display:flex><span>		fail(&#34;pc is not aligned: %08x&#34;, ctx-&gt;pc);
+</span></span><span style=display:flex><span> 
+</span></span><span style=display:flex><span><span style=color:#a6e22e>+	if(ctx-&gt;pc == 0x2B4)
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		return 1;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> //	dbgprintf(&#34;\n\n&#34;, count);
+</span></span><span style=display:flex><span>	return 0;
+</span></span><span style=display:flex><span> }
+</span></span></code></pre></div><p>Finally we will initialize the stack pointer (r1) and write the flag input from a file. This will allow us to generate traces for different test patterns.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/main.c b/main.c
+</span></span><span style=display:flex><span>index f85547b..f033ffd 100644
+</span></span><span style=display:flex><span><span style=color:#f92672>--- a/main.c
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/main.c
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -124,6 +124,18 @@ int main(int argc, char *argv[])
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	wbe32(ctx-&gt;ls + 0x3f008, 0x10000);
+</span></span><span style=display:flex><span>	wbe32(ctx-&gt;ls + 0x3e000, 0xff);
+</span></span><span style=display:flex><span> #endif
+</span></span><span style=display:flex><span><span style=color:#a6e22e>+	ctx-&gt;reg[1][0] = 0x3FF00;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	ctx-&gt;reg[1][1] = 0x3FF00;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	ctx-&gt;reg[1][2] = 0x3FF00;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	ctx-&gt;reg[1][3] = 0x3FF00;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	u_int64_t flag[12];
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	FILE* inp = fopen(&#34;inp&#34;, &#34;r&#34;);
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	fread(flag, sizeof(u_int64_t), sizeof(flag) / sizeof(u_int64_t), inp);
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	for(size_t idx = 0; idx &lt; sizeof(flag) / sizeof(u_int64_t); idx++) {
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		wbe64(ctx-&gt;ls + 0x3FF00 + 0x30 + (idx * 8), __builtin_bswap64(flag[idx]));
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	}
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	fclose(inp);
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 
+</span></span><span style=display:flex><span>	if (gdb_port &lt; 0) {
+</span></span><span style=display:flex><span>		ctx-&gt;paused = 0;
+</span></span></code></pre></div><p>The input is a little bit bigger than required because the flag portion is present multiple times and some other constants are loaded with it from the main CPU.</p><p>I changed the entry point of the ELF to test different SPUs code but two of them failed. With some single stepping in the debugger I was able to identify a faulty instruction, <code>andhi</code> was not reading from <code>ra</code>. On the other hand <code>shlhi</code> was simply not implemented.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/instrs b/instrs
+</span></span><span style=display:flex><span>index b77d65a..fa169bd 100644
+</span></span><span style=display:flex><span><span style=color:#f92672>--- a/instrs
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/instrs
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -681,11 +681,11 @@
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span> 
+</span></span><span style=display:flex><span> 00010101,ri10,andhi,half,signed
+</span></span><span style=display:flex><span> {
+</span></span><span style=display:flex><span>	int i;
+</span></span><span style=display:flex><span>	for (i = 0; i &lt; 8; ++i)
+</span></span><span style=display:flex><span><span style=color:#f92672>-		rth[i] &amp;= i10;
+</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+		rth[i] = rah[i] &amp; i10;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> }
+</span></span><span style=display:flex><span> 
+</span></span><span style=display:flex><span> 00010100,ri10,andi,signed
+</span></span><span style=display:flex><span> {
+</span></span><span style=display:flex><span>	int i;
+</span></span><span style=display:flex><span><span style=color:#75715e>@@ -1005,10 +1005,23 @@
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		else
+</span></span><span style=display:flex><span>			rtw[i] = raw[i] &lt;&lt; shift_count;
+</span></span><span style=display:flex><span>	}
+</span></span><span style=display:flex><span> }
+</span></span><span style=display:flex><span> 
+</span></span><span style=display:flex><span><span style=color:#a6e22e>+00001111111,ri7,shlhi,half
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+{
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	int i;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	int shift_count = i7 &amp; 0x1f;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	for (i = 0; i &lt; 8; ++i)
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	{
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		if (shift_count &gt; 15)
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+			rth[i] = 0;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		else
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+			rth[i] = rah[i] &lt;&lt; shift_count;
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	}
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+}
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 00001011011,rr,shl
+</span></span><span style=display:flex><span> {
+</span></span><span style=display:flex><span>	int i;
+</span></span><span style=display:flex><span>	for (i = 0; i &lt; 4; ++i)
+</span></span><span style=display:flex><span>	{
+</span></span></code></pre></div><p>Now that we can produce clear traces and have an interactive disassembler, we sit down, focus for 2 hours and transcribe the whole code.</p><h1 id=vi---conclusion>VI - Conclusion</h1><p>I won&rsquo;t go through all the details since it&rsquo;s mostly understanding every instructions and writing the inverse operation in a python script so here is the solve script, it describes pretty well what each SPUs does.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>import</span> sys
+</span></span><span style=display:flex><span><span style=color:#f92672>import</span> struct
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>c1730 <span style=color:#f92672>=</span> bytes<span style=color:#f92672>.</span>fromhex(
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;32 A5 2B DF AC D9 CD C1 EF 3A 84 2C 53 3C FF 9A&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;EB 16 D3 3F BC C4 31 47 12 96 75 90 8A C5 BF 43&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;7A 64 B5 C6 AA A1 22 48 F9 99 08 34 65 A3 98 44&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;A0 E0 6B B6 BE CE FC 03 A6 A4 35 5E 11 D7 76 05&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;0E F4 A2 AE 70 6F 78 9C 09 4C 17 F0 D8 56 FD 15&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;71 F3 FB 1D B7 A7 66 9F B3 79 C3 B4 5D 5B AB D6&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;94 1E C0 0C 9D 04 7F E4 6A 4B 9B E8 0D 86 82 EA&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;52 DB 51 D4 B0 B9 A8 61 6D E6 97 7C AD CB DA 88&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;68 1C 07 00 30 6C 50 59 3E 40 20 DE F1 F5 0F A9&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;5C 4D 89 21 BD E2 57 0B 67 C7 87 C2 D2 DC 18 93&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;8E 36 77 8C E5 4E 9E 39 60 80 73 FA FE 0A 81 ED&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;B1 2F F6 BA 58 EE 85 45 38 D5 4A E7 5F 2E F7 91&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;2D 95 7D B8 7E 1F 49 02 63 E3 2A E1 10 CA 06 27&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;37 69 3B 83 8F 92 13 55 CC 29 54 26 14 1A 1B 41&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;D1 42 46 EC 62 74 D0 28 3D 8B F8 CF 7B B2 4F 6E&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span><span style=color:#e6db74>&#34;C8 DD 33 23 F2 AF 72 24 E9 01 19 8D BB 25 C9 5A&#34;</span>
+</span></span><span style=display:flex><span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>rol_byte</span>(inp, x):
+</span></span><span style=display:flex><span>    x <span style=color:#f92672>=</span> x <span style=color:#f92672>%</span> <span style=color:#ae81ff>16</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> len(inp) <span style=color:#f92672>==</span> <span style=color:#ae81ff>16</span>
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>16</span>):
+</span></span><span style=display:flex><span>        out <span style=color:#f92672>+=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;B&#34;</span>, inp[(i <span style=color:#f92672>+</span> x) <span style=color:#f92672>%</span> <span style=color:#ae81ff>16</span>])
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>ror_bit</span>(inp, x):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> x <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>64</span>
+</span></span><span style=display:flex><span>    a, b <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;!QQ&#34;</span>, inp)
+</span></span><span style=display:flex><span>    ab <span style=color:#f92672>=</span> a <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>64</span> <span style=color:#f92672>|</span> b
+</span></span><span style=display:flex><span>    ab <span style=color:#f92672>=</span> (ab <span style=color:#f92672>&gt;&gt;</span> x) <span style=color:#f92672>|</span> (ab <span style=color:#f92672>&lt;&lt;</span> (<span style=color:#ae81ff>128</span> <span style=color:#f92672>-</span> x)) <span style=color:#f92672>&amp;</span> (<span style=color:#ae81ff>2</span><span style=color:#f92672>**</span><span style=color:#ae81ff>128</span>)<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;!QQ&#34;</span>, ab <span style=color:#f92672>&gt;&gt;</span> <span style=color:#ae81ff>64</span>, ab <span style=color:#f92672>&amp;</span> (<span style=color:#ae81ff>2</span><span style=color:#f92672>**</span><span style=color:#ae81ff>64</span>)<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>sbox_inverse</span>(inp):
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> bytearray([<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>16</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x10</span>):
+</span></span><span style=display:flex><span>        s <span style=color:#f92672>=</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> j <span style=color:#f92672>in</span> range(len(c1730)):
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> c1730[j] <span style=color:#f92672>==</span> inp[i]:
+</span></span><span style=display:flex><span>                s <span style=color:#f92672>=</span> j
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>assert</span> s <span style=color:#f92672>!=</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>        out[i] <span style=color:#f92672>=</span> s
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>spu0</span>(inp):
+</span></span><span style=display:flex><span>    r15 <span style=color:#f92672>=</span> bytearray(sbox_inverse(inp))
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x10</span>):
+</span></span><span style=display:flex><span>        r15[i] <span style=color:#f92672>=</span> (r15[i] <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xef</span>) <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>
+</span></span><span style=display:flex><span>    r79 <span style=color:#f92672>=</span> bytearray(ror_bit(r15, <span style=color:#ae81ff>5</span>))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> bytearray([<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>16</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i, c <span style=color:#f92672>in</span> enumerate([<span style=color:#ae81ff>0x5</span>, <span style=color:#ae81ff>0x9</span>, <span style=color:#ae81ff>0x8</span>, <span style=color:#ae81ff>0x4</span>,
+</span></span><span style=display:flex><span>                           <span style=color:#ae81ff>0x1</span>, <span style=color:#ae81ff>0x0</span>, <span style=color:#ae81ff>0xa</span>, <span style=color:#ae81ff>0xc</span>,
+</span></span><span style=display:flex><span>                           <span style=color:#ae81ff>0xb</span>, <span style=color:#ae81ff>0xf</span>, <span style=color:#ae81ff>0xe</span>, <span style=color:#ae81ff>0x7</span>,
+</span></span><span style=display:flex><span>                           <span style=color:#ae81ff>0xd</span>, <span style=color:#ae81ff>0x2</span>, <span style=color:#ae81ff>0x3</span>, <span style=color:#ae81ff>0x6</span>]):
+</span></span><span style=display:flex><span>        out[i] <span style=color:#f92672>=</span> r79[c]
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>spu1</span>(inp):
+</span></span><span style=display:flex><span>    r3 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;!IIII&#34;</span>, sbox_inverse(inp))
+</span></span><span style=display:flex><span>    cFEED <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0xFEEDBABE</span>, <span style=color:#ae81ff>0xDEADBEEF</span>, <span style=color:#ae81ff>0xFEEDBABE</span>, <span style=color:#ae81ff>0xDEADBEEF</span>]
+</span></span><span style=display:flex><span>    r63 <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>4</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i, a, b <span style=color:#f92672>in</span> zip(range(<span style=color:#ae81ff>4</span>), r3, cFEED):
+</span></span><span style=display:flex><span>        r63[i] <span style=color:#f92672>=</span> (a <span style=color:#f92672>+</span> b <span style=color:#f92672>+</span> (i<span style=color:#f92672>%</span><span style=color:#ae81ff>2</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>1</span>)) <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xffffffff</span>
+</span></span><span style=display:flex><span>    r63 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;!IIII&#34;</span>, <span style=color:#f92672>*</span>r63)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> rol_byte(ror_bit(r63, <span style=color:#ae81ff>6</span>), <span style=color:#f92672>-</span><span style=color:#ae81ff>9</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>spu2</span>(inp):
+</span></span><span style=display:flex><span>    r3 <span style=color:#f92672>=</span> sbox_inverse(inp)
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> a, b <span style=color:#f92672>in</span> zip(r3, bytes<span style=color:#f92672>.</span>fromhex(<span style=color:#e6db74>&#34;AABBCCDDEEFF1122AABBCCDDEEFF1122&#34;</span>)):
+</span></span><span style=display:flex><span>        out <span style=color:#f92672>+=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;B&#34;</span>, a <span style=color:#f92672>^</span> b)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>spu3</span>(inp):
+</span></span><span style=display:flex><span>    r78 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;!QQ&#34;</span>, sbox_inverse(inp))
+</span></span><span style=display:flex><span>    r77 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;!QQ&#34;</span>, r78[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>^</span> (<span style=color:#ae81ff>2</span><span style=color:#f92672>**</span><span style=color:#ae81ff>64</span>)<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>, r78[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>^</span> (<span style=color:#ae81ff>2</span><span style=color:#f92672>**</span><span style=color:#ae81ff>64</span>)<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    r72 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;!HHHHHHHH&#34;</span>, rol_byte(ror_bit(r77, <span style=color:#ae81ff>3</span>), <span style=color:#f92672>-</span><span style=color:#ae81ff>5</span>))
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i, c <span style=color:#f92672>in</span> enumerate([<span style=color:#ae81ff>7</span>,<span style=color:#ae81ff>6</span>,<span style=color:#ae81ff>3</span>,<span style=color:#ae81ff>1</span>,<span style=color:#ae81ff>0</span>,<span style=color:#ae81ff>2</span>,<span style=color:#ae81ff>4</span>,<span style=color:#ae81ff>5</span>]):
+</span></span><span style=display:flex><span>        out[i] <span style=color:#f92672>=</span> r72[c]
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;!HHHHHHHH&#34;</span>, <span style=color:#f92672>*</span>out)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>spu4</span>(inp):
+</span></span><span style=display:flex><span>    r3 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;!IIII&#34;</span>, sbox_inverse(inp))
+</span></span><span style=display:flex><span>    r44 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;!IIII&#34;</span>, r3[<span style=color:#ae81ff>3</span>], r3[<span style=color:#ae81ff>1</span>], r3[<span style=color:#ae81ff>0</span>], r3[<span style=color:#ae81ff>2</span>])
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> a, b <span style=color:#f92672>in</span> zip(r44, bytes<span style=color:#f92672>.</span>fromhex(<span style=color:#e6db74>&#34;87934520&#34;</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>4</span>):
+</span></span><span style=display:flex><span>        out <span style=color:#f92672>+=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;B&#34;</span>, a <span style=color:#f92672>^</span> b)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>spu5</span>(inp):
+</span></span><span style=display:flex><span>    r11 <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;!HHHHHHHH&#34;</span>, sbox_inverse(inp))
+</span></span><span style=display:flex><span>    r26 <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i, c <span style=color:#f92672>in</span> enumerate([<span style=color:#ae81ff>7</span>,<span style=color:#ae81ff>6</span>,<span style=color:#ae81ff>3</span>,<span style=color:#ae81ff>1</span>,<span style=color:#ae81ff>0</span>,<span style=color:#ae81ff>2</span>,<span style=color:#ae81ff>4</span>,<span style=color:#ae81ff>5</span>]):
+</span></span><span style=display:flex><span>        r26[i] <span style=color:#f92672>=</span> r11[c]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> h <span style=color:#f92672>in</span> r26:
+</span></span><span style=display:flex><span>        out <span style=color:#f92672>+=</span> struct<span style=color:#f92672>.</span>pack(<span style=color:#e6db74>&#34;!h&#34;</span>, (h <span style=color:#f92672>-</span> <span style=color:#ae81ff>0xfaaf</span>) <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xffff</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>expected <span style=color:#f92672>=</span> bytes<span style=color:#f92672>.</span>fromhex(<span style=color:#e6db74>&#34;05d25acb9f61242e2490c30ec3dc1ba6&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                         <span style=color:#e6db74>&#34;92dc2166bba13c99920a2175249d5d6a&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                         <span style=color:#e6db74>&#34;c9b2580f30875b474607fa45384de84c&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                         <span style=color:#e6db74>&#34;ab9dbe5ba7cda77b1f04fe86785dcb49&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                         <span style=color:#e6db74>&#34;1b8bd3825a7ecba72a2a52bc7377b979&#34;</span> <span style=color:#f92672>+</span>
+</span></span><span style=display:flex><span>                         <span style=color:#e6db74>&#34;783aaec46b19e8a5a775fb4605d382b5&#34;</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>flag <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> i, f <span style=color:#f92672>in</span> enumerate([spu0, spu1, spu2, spu3, spu4, spu5]):
+</span></span><span style=display:flex><span>    flag <span style=color:#f92672>+=</span> f(expected[i<span style=color:#f92672>*</span><span style=color:#ae81ff>16</span>:(i<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>16</span>])
+</span></span><span style=display:flex><span>print(<span style=color:#e6db74>&#34;FCSC{</span><span style=color:#e6db74>%s</span><span style=color:#e6db74>}&#34;</span> <span style=color:#f92672>%</span> flag<span style=color:#f92672>.</span>decode())
+</span></span></code></pre></div><p>Please note that it is the cleaned up version of the script. At the beginning I wrote one file per SPU without noticing their similarities. It took me up to SPU3 or SPU4 to notice that they all ended with the same s-box.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ python3 solve.py
+</span></span><span style=display:flex><span>FCSC{30gbt9RzIif5L_s70cRm7gXHm_R-8WkKTVxSjeL5H9gjVnzkSJBg3y4prWG4tU_5-10yxW8uYzWNMY54ssDcpRHfKZ8KZkX3}
+</span></span><span style=display:flex><span>$ ncat 127.0.0.1 <span style=color:#ae81ff>1337</span>
+</span></span><span style=display:flex><span>    ____            ____          __     ______     ____
+</span></span><span style=display:flex><span>   / __ \___  _____/ __/__  _____/ /_   / ____/__  / / /
+</span></span><span style=display:flex><span>  / /_/ / _ \/ ___/ /_/ _ \/ ___/ __/  / /   / _ \/ / / 
+</span></span><span style=display:flex><span> / ____/  __/ /  / __/  __/ /__/ /_   / /___/  __/ / /  
+</span></span><span style=display:flex><span>/_/    \___/_/  /_/  \___/\___/\__/   \____/\___/_/_/   
+</span></span><span style=display:flex><span>							
+</span></span><span style=display:flex><span>========================================================
+</span></span><span style=display:flex><span>Welcome to Pefect Cell!
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>Please provide a correct input ...
+</span></span><span style=display:flex><span>FCSC{30gbt9RzIif5L_s70cRm7gXHm_R-8WkKTVxSjeL5H9gjVnzkSJBg3y4prWG4tU_5-10yxW8uYzWNMY54ssDcpRHfKZ8KZkX3}
+</span></span><span style=display:flex><span>Well done, this is a win! :-)
+</span></span></code></pre></div><p><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-004.png alt="&amp;ldquo;You Win!&amp;rdquo; screen"></p></main><hr><footer>© 2020 - 2022 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>

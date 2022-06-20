@@ -1,0 +1,233 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>[FR] Write-up FCSC 2021 : Stars:2ndMix CryptoEdition - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=https://redoste.xyz/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>[FR] Write-up FCSC 2021 : Stars:2ndMix CryptoEdition</h2><span class=date>2021-05-03 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2021/>FCSC 2021</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>Stars:2ndMix CryptoEdition</em> se compose d&rsquo;une image d&rsquo;un disque de <em>Dreamcast</em> au format <em>DiscJuggler</em>. Ce challenge me semblait intéressant, car j&rsquo;ai comme une attirance pour les architectures bizares et mal documentées, j&rsquo;ai notamment précedemment travaillé sur <a href=https://github.com/redoste/fx-CG50_Manager_PLUS-gdbserver>un debuggeur pour calculatrices Casio</a> qui ont la particularité d&rsquo;utiliser la même architecuture que la Dreamcast (SuperH 4).</p><p>Il nous est indiqué dans la description du challenge que celui avait été testé avec <a href=https://github.com/flyinghead/flycast>Flycast</a>, on télécharge donc le code source et on utilise <code>cmake</code> pour le compiler. On peut ensuite l&rsquo;executer et ouvrir l&rsquo;image disque fournie.</p><p><img src=/img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-001.png alt="Zone de texte du flag"></p><p>Après nous avoir accueilli (sous fond de superbe chiptune), on nous invite alors à rentrer un flag au format <code>FCSC{0123456789ABCDEF}</code> et le programme nous indique si celui-ci est valide ou non.</p><h1 id=ii---extraction-de-1st_readbin>II - Extraction de <code>1ST_READ.bin</code></h1><p>Tout d&rsquo;abbord, il faut extraire l&rsquo;executable de l&rsquo;image. Après un peu de recherche on trouve <em><a href=https://www.romhacking.net/utilities/1459/>GDRom Explorer</a></em> qui permet notament de naviguer dans les images au format <em>DiscJuggler</em>. On extrait alors <code>1ST_READ.BIN</code>, il s&rsquo;aggit du binaire principal du programme, celui-ci est precedemment chargé par <code>IP.BIN</code> à l&rsquo;adresse <code>0x8c010000</code> avant de simplement sauter au debut de celui-ci.</p><p>Après l&rsquo;avoir extrait, on l&rsquo;importe comme un binaire brut dans Ghidra en indiquant l&rsquo;adresse de base, l&rsquo;architecuture (SuperH 4) et l&rsquo;endianness (petit). On indique que l&rsquo;entry point est à <code>0x8c010000</code> et on lance l&rsquo;analyse. Le problème c&rsquo;est que celle-ci est extremement rapide et ne semble avoir trouvé que quelques fonctions. Les strings sont lisibles et le code semble avoir du sens, mais les instructions au debut du binaire ne semblent pas appropriées. Comme si le binaire était mélangé.</p><p>Après un peu de recherche sur les problèmes d&rsquo;extractions de <code>1ST_READ.bin</code>, je tombe sur un mot qui me rappelle quelque chose. &ldquo;<em>scramble</em>&rdquo;. En effet j&rsquo;avais vu <a href=https://youtu.be/rj56VU_VmWg>une vidéo sur YouTube de <em>Modern Vintage Gamer</em></a> à propos de la protection anti-copie de la Dreamcast et il y est expliqué que lorsque le jeu est chargé depuis un CD-ROM et non un GD-ROM, <code>1ST_READ.BIN</code> est mélangé lors de son chargement en mémoire.</p><p>On trouve alors <em><a href=https://github.com/sizious/binary-checker>Binary Checker</a></em> qui a la capacité de remettre en ordre <code>1ST_READ.BIN</code>. On peut ensuite le réimporter dans Ghidra, relancer une analyse et y trouver un déassemblage qui a du sens.</p><h1 id=iii---reverse-engineering-du-binaire>III - Reverse engineering du binaire</h1><p>Comme dans toute bonne rétro-ingénierie, il faut commencer par la fin. On recherche donc les strings <code>"YOU FAILED"</code> et <code>"YOU WIN!"</code>. D&rsquo;après les XREFs, celles-ci ne sont utilisées que par une fonction.</p><p>Ghidra nous donne une plutôt bonne décompilation de celle-ci et on peut se concentrer sur la partie responsable du choix de l&rsquo;une ou de l&rsquo;autre chaine.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>if</span> (current_step <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x12</span>) {
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>current_step_ptr <span style=color:#f92672>=</span> <span style=color:#ae81ff>0x13</span>;
+</span></span><span style=display:flex><span>  iVar5 <span style=color:#f92672>=</span> (<span style=color:#f92672>*</span>(code <span style=color:#f92672>*</span>)send_flag_to_ARM)(<span style=color:#ae81ff>0x10</span>,user_input_ptr);
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (iVar5 <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>    iVar14 <span style=color:#f92672>=</span> (<span style=color:#66d9ef>int</span>)DAT_8c010ef2;
+</span></span><span style=display:flex><span>    iVar5 <span style=color:#f92672>=</span> (<span style=color:#66d9ef>int</span>)DAT_8c010ef4;
+</span></span><span style=display:flex><span>    <span style=color:#f92672>*</span>current_step_ptr <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>current_step_ptr <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    choosen_message <span style=color:#f92672>=</span> PTR_s_Checking..._8c010f08;
+</span></span><span style=display:flex><span>    (<span style=color:#f92672>*</span>(code <span style=color:#f92672>*</span>)PTR_send_ARM_order_1_8c010f34)(DAT_8c010f38,iVar5,iVar14);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>goto</span> LAB_8c010dea;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>  choosen_message <span style=color:#f92672>=</span> PTR_s_YOU_FAILED_8c010f24;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> ((current_step <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x13</span>) <span style=color:#f92672>||</span> (choosen_message <span style=color:#f92672>=</span> PTR_s_YOU_WIN<span style=color:#f92672>!</span>_8c010f20, current_step <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x14</span>))
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>goto</span> LAB_8c010dea;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Le message de succès sera donc choisi si la fonction que j&rsquo;ai nommée <code>send_flag_to_ARM</code> renvoie 0. Celle-ci prend en paramètre un entier et un pointeur, avec le contexte on peut deviner que 0x10 correspond à la taille du flag et que le pointeur correspond à l&rsquo;entrée de l&rsquo;utilisateur.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>send_flag_to_ARM</span>(<span style=color:#66d9ef>int</span> len,<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>buf) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> cVar1;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>pcVar3;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>iVar4;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  iVar4 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0xa080ff00</span>;
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(iVar4 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xc</span>) <span style=color:#f92672>=</span> len;
+</span></span><span style=display:flex><span>  pcVar3 <span style=color:#f92672>=</span> iVar4 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x10</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>      cVar1 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>buf;
+</span></span><span style=display:flex><span>      buf <span style=color:#f92672>=</span> buf <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>      len <span style=color:#f92672>=</span> len <span style=color:#f92672>+</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>      <span style=color:#f92672>*</span>pcVar3 <span style=color:#f92672>=</span> cVar1;
+</span></span><span style=display:flex><span>      pcVar3 <span style=color:#f92672>=</span> pcVar3 <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>while</span> (len <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>    iVar4 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0xa080ff00</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(undefined4 <span style=color:#f92672>*</span>)(iVar4 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>4</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>  } <span style=color:#66d9ef>while</span> (<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(iVar4 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(iVar4 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xc</span>);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Suite à mon experience passée avec SuperH, l&rsquo;utilisation d&rsquo;une adresse qui commence par <code>0xa</code>, qui signifie que l&rsquo;accès à la mémoire ne passe pas par le cache, me fait penser à l&rsquo;utilisation d&rsquo;un periphérique. De plus, après avoir écrit <code>4</code> à <code>0xa080ff08</code>, on boucle en attendant que celle-ci repasse à <code>0</code>, cela semble être l&rsquo;action d&rsquo;un autre bout de silicium.</p><p>Après m&rsquo;être perdu dans les tréfonds de Google, je n&rsquo;ai pas réussi à mettre la main sur une liste des périphériques de la Dreamcast. Donc comme dit le vieil adage :</p><blockquote><p>La meilleure documentation est le code source lui-même</p></blockquote><p>Donc j&rsquo;ai commencé à grepper plusieurs termes dans le code source de Flycast. Après un peu de recherche je tombe sur cette table dans <code>core/hw/mem/_vmem.cpp</code> :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>const</span> vmem_mapping mem_mappings[] <span style=color:#f92672>=</span> {
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// P0/U0
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x00000000</span>, <span style=color:#ae81ff>0x00800000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// Area 0 -&gt; unused
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x00800000</span>, <span style=color:#ae81ff>0x01000000</span>,    MAP_ARAM_START_OFFSET, ARAM_SIZE, true},  <span style=color:#75715e>// Aica
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x01000000</span>, <span style=color:#ae81ff>0x02800000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// unused
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x02800000</span>, <span style=color:#ae81ff>0x03000000</span>,    MAP_ARAM_START_OFFSET, ARAM_SIZE, true},  <span style=color:#75715e>// Aica mirror
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x03000000</span>, <span style=color:#ae81ff>0x04000000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// unused
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x04000000</span>, <span style=color:#ae81ff>0x05000000</span>,    MAP_VRAM_START_OFFSET, VRAM_SIZE, true},  <span style=color:#75715e>// Area 1 (vram, 16MB, wrapped on DC as 2x8MB)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x05000000</span>, <span style=color:#ae81ff>0x06000000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// 32 bit path (unused)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x06000000</span>, <span style=color:#ae81ff>0x07000000</span>,    MAP_VRAM_START_OFFSET, VRAM_SIZE, true},  <span style=color:#75715e>// VRAM mirror
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x07000000</span>, <span style=color:#ae81ff>0x08000000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// 32 bit path (unused) mirror
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x08000000</span>, <span style=color:#ae81ff>0x0C000000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// Area 2
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x0C000000</span>, <span style=color:#ae81ff>0x10000000</span>,    MAP_RAM_START_OFFSET,  RAM_SIZE,  true},  <span style=color:#75715e>// Area 3 (main RAM + 3 mirrors)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  {<span style=color:#ae81ff>0x10000000</span>, <span style=color:#ae81ff>0x80000000</span>,                       <span style=color:#ae81ff>0</span>,         <span style=color:#ae81ff>0</span>, false},  <span style=color:#75715e>// Area 4-7 (unused)
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>};
+</span></span></code></pre></div><p>Si on ignore le <code>0xa</code> de l&rsquo;adresse indiquée precedemment (qui ne sert qu&rsquo;à indiquer que l&rsquo;on écrit dans P2 sans cache), on écrirait donc à <code>0xff00</code> dans la RAM de l&rsquo;AICA.</p><h1 id=iv---laica>IV - l&rsquo;AICA</h1><p>L&rsquo;AICA est le sous-système sonore de la Dreamcast développé par Yamaha, il est principalement composé d&rsquo;un processeur ARM v7 et de 2MiB de RAM. Ces 2MiB de RAM sont donc accessibles par le processeur SuperH de <code>0x00800000</code> à <code>0x00a00000</code>.</p><p>Pour comprendre comment cette comparaison est faite, il faudrait pouvoir dump le contenu de cette RAM pour pouvoir déassembler et décompiler le code ARM. Celui-ci devrait être écrit par le code SuperH mais pour cela il faut identifier où et quand cela ce passe. Pour être honnête je sens arriver de la crypto complexe à grands pas et je n&rsquo;ai pas du tout l&rsquo;envie de chercher à comprendre ça, j&rsquo;ai donc sorti GDB.</p><p>En effet, en ayant compilé Flycast avec les options par défaut de cmake, le binaire produit possède les informations de debug DWARF, on peut donc utiliser GDB avec le confort de pouvoir lire les variables avec leur vrai nom et non leur adresse (entre autres).</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#75715e>// core/hw/aica/aica_if.cpp
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>VArray2 aica_ram;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// core/stdclass.h
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>class VArray2 {
+</span></span><span style=display:flex><span>public:
+</span></span><span style=display:flex><span>  u8<span style=color:#f92672>*</span> data;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>unsigned</span> size;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// ...
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>};
+</span></span></code></pre></div><pre tabindex=0><code>$ gdb ./build/flycast
+gef&gt;  handle SIGSEGV noprint nostop
+Signal        Stop	Print	Pass to program	Description
+SIGSEGV       No	No	Yes		Segmentation fault
+gef&gt;  run ../Stars2ndMix_CryptoEdition.cdi
+^C
+Thread 1 &#34;flycast&#34; received signal SIGINT, Interrupt.
+0x00007ffff74c71b7 in ioctl () at ../sysdeps/unix/syscall-template.S:120
+gef&gt;  print aica_ram
+&#39;aica_ram&#39; has unknown type; cast it to its declared type
+gef&gt;  print &amp;aica_ram
+$1 = (&lt;data variable, no debug info&gt; *) 0x555556b741f0 &lt;aica_ram&gt;
+gef&gt;  x/2gx 0x555556b741f0
+0x555556b741f0 &lt;aica_ram&gt;:	0x00007fff5c7f0000	0x0000000000200000
+gef&gt;  dump memory ../aica.bin 0x00007fff5c7f0000 (0x00007fff5c7f0000+0x0000000000200000)
+</code></pre><p>Pour des raisons qui me sont inconnues, GDB a refusé de completement coopérer et n&rsquo;a pas voulu parser le <code>VArray2</code>. Cette structure étant extremement simple, je l&rsquo;ai donc interprétée moi-même. Après avoir trouvé l&rsquo;adresse de la RAM de l&rsquo;AICA, on peut utiliser <code>dump memory</code> pour écrire dans un fichier le contenu de celle-ci.</p><p>On peut maintenant importer le fichier <code>aica.bin</code> dans Ghidra, de la même manière que pour <code>1ST_READ.BIN</code>, on l&rsquo;importe comme un binaire brut, chargé à l&rsquo;adresse <code>0</code> en ARM v7 little-endian.</p><p>Après analyse, on peut se rendre à l&rsquo;adresse où le résultat de la verification est écrit, <code>0xa080ff0c</code> pour le SuperH correspond à <code>0xff0c</code> dans l&rsquo;espace d&rsquo;adresse de l&rsquo;ARM. En suivant les XREFs, on voit que celle-ci peut être écrite à deux endroits, en fonction de la valeur écrite en <code>0xa080ff08</code>, une fonction ou une autre est appelée et son résultat est écrit en <code>0xa080ff0c</code>. On peut donc supposer que <code>0xa080ff08</code> est utilisée pour communiquer un numéro d&rsquo;action à effectuer.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>SH_registers <span style=color:#f92672>=</span> <span style=color:#ae81ff>0xff00</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>switch</span>(<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>)) {
+</span></span><span style=display:flex><span><span style=color:#66d9ef>case</span> <span style=color:#ae81ff>0</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>case</span> <span style=color:#ae81ff>1</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  <span style=color:#75715e>// ...
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>case</span> <span style=color:#ae81ff>2</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  SH_order_2();
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>case</span> <span style=color:#ae81ff>3</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  uVar4 <span style=color:#f92672>=</span> SH_order_3();
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xc</span>) <span style=color:#f92672>=</span> uVar4;
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>case</span> <span style=color:#ae81ff>4</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  bVar3 <span style=color:#f92672>=</span> SH_flag_solve(<span style=color:#f92672>*</span>(size_t <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xc</span>),(<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x10</span>));
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xc</span>) <span style=color:#f92672>=</span> (uint)bVar3;
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>default</span><span style=color:#f92672>:</span>
+</span></span><span style=display:flex><span>  <span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)(SH_registers <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p><code>SH_flag_solve</code> prend donc en paramètre la taille du flag ainsi qu&rsquo;un pointeur vers le buffer.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>char</span> <span style=color:#a6e22e>SH_flag_solve</span>(size_t len,<span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>buf) {
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> bVar1;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>iter;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>inner_check_iter;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>char</span> abStack32 [<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>  SH_flag_solve_SUB(PTR_DAT_00002004,abStack32,PTR_DAT_00002008,<span style=color:#ae81ff>0x10</span>);
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (len <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x10</span>) {
+</span></span><span style=display:flex><span>    bVar1 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    iter <span style=color:#f92672>=</span> buf <span style=color:#f92672>+</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    inner_check_iter <span style=color:#f92672>=</span> abStack32;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>      iter <span style=color:#f92672>=</span> iter <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>      bVar1 <span style=color:#f92672>=</span> bVar1 <span style=color:#f92672>|</span> <span style=color:#f92672>*</span>inner_check_iter <span style=color:#f92672>^</span> <span style=color:#f92672>*</span>iter;
+</span></span><span style=display:flex><span>      inner_check_iter <span style=color:#f92672>=</span> inner_check_iter <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>while</span> (iter <span style=color:#f92672>!=</span> (buf <span style=color:#f92672>+</span> <span style=color:#ae81ff>0xf</span>));
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>    bVar1 <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>  }
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span> bVar1;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Il s&rsquo;aggit donc d&rsquo;une simple constant time comparaison entre le flag tel qu&rsquo;envoyé par le SuperH et un buffer interne. Celui-ci semble être constamment modifié et les fonctions qui en sont responsables sont plutôt <em>conséquantes</em>.</p><p><img src=/img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-002.png alt="Une de ces fonctions conséquantes"></p><h1 id=v---modification-de-flycast>V - Modification de Flycast</h1><p>Une des solutions pour ne pas avoir à comprendre ce genre d&rsquo;horreur, c&rsquo;est tout simplement de logguer les opérandes du XOR lors de la comparaison. Pour cela il suffit de modifier l&rsquo;émulateur de <a href=https://redoste.xyz/2020/04/21/modding-wii-sports-part-i-identifying-files-and-creating-a-debug-output/#iii---adding-a-custom-debug-output>la même manière que j&rsquo;avais fait auparavant pour rajouter une sortie de debug dans Wii Sport</a>.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>diff <span style=color:#f92672>--</span>git a<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>hw<span style=color:#f92672>/</span>arm7<span style=color:#f92672>/</span>arm7.cpp b<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>hw<span style=color:#f92672>/</span>arm7<span style=color:#f92672>/</span>arm7.cpp
+</span></span><span style=display:flex><span>index ac1289bc..dfaec903 <span style=color:#ae81ff>100644</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>---</span> a<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>hw<span style=color:#f92672>/</span>arm7<span style=color:#f92672>/</span>arm7.cpp
+</span></span><span style=display:flex><span><span style=color:#f92672>+++</span> b<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>hw<span style=color:#f92672>/</span>arm7<span style=color:#f92672>/</span>arm7.cpp
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>@@</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>58</span>,<span style=color:#ae81ff>16</span> <span style=color:#f92672>+</span><span style=color:#ae81ff>58</span>,<span style=color:#ae81ff>20</span> <span style=color:#960050;background-color:#1e0010>@@</span> <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> clockTicks;
+</span></span><span style=display:flex><span> <span style=color:#66d9ef>static</span> <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>runInterpreter</span>(u32 CycleCount)
+</span></span><span style=display:flex><span> {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (<span style=color:#f92672>!</span>Arm7Enabled)
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        clockTicks <span style=color:#f92672>-=</span> CycleCount;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> (clockTicks <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>        {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (reg[INTR_PEND].I)
+</span></span><span style=display:flex><span>                        CPUFiq();
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>                reg[<span style=color:#ae81ff>15</span>].I <span style=color:#f92672>=</span> armNextPC <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>;
+</span></span><span style=display:flex><span>                <span style=color:#75715e>#include</span> <span style=color:#75715e>&#34;arm-new.h&#34;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#f92672>+</span>               <span style=color:#66d9ef>if</span>(reg[<span style=color:#ae81ff>15</span>].I <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x01ff0</span>)
+</span></span><span style=display:flex><span><span style=color:#f92672>+</span>                       printf(<span style=color:#e6db74>&#34;SH_flag_solve : %02X ^ %02X</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, reg[<span style=color:#ae81ff>3</span>].I, reg[<span style=color:#ae81ff>14</span>].I);
+</span></span><span style=display:flex><span><span style=color:#f92672>+</span>               <span style=color:#66d9ef>if</span>(reg[<span style=color:#ae81ff>15</span>].I <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x01ff8</span>)
+</span></span><span style=display:flex><span><span style=color:#f92672>+</span>                       printf(<span style=color:#e6db74>&#34;SH_flag_solve : == %02X</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, reg[<span style=color:#ae81ff>3</span>].I);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span> }
+</span></span></code></pre></div><p>Cependant, nous venons de changer l&rsquo;interpreteur ARM or un JIT est disponible, il ne faut donc pas oublier de le désactiver :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>diff <span style=color:#f92672>--</span>git a<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>build.h b<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>build.h
+</span></span><span style=display:flex><span>index b36264f1..b790caf9 <span style=color:#ae81ff>100755</span>
+</span></span><span style=display:flex><span><span style=color:#f92672>---</span> a<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>build.h
+</span></span><span style=display:flex><span><span style=color:#f92672>+++</span> b<span style=color:#f92672>/</span>core<span style=color:#f92672>/</span>build.h
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>@@</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>194</span>,<span style=color:#ae81ff>7</span> <span style=color:#f92672>+</span><span style=color:#ae81ff>194</span>,<span style=color:#ae81ff>7</span> <span style=color:#960050;background-color:#1e0010>@@</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span> <span style=color:#75715e>#ifndef FEAT_AREC
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span> 	<span style=color:#75715e>#if HOST_CPU == CPU_ARM || HOST_CPU == CPU_ARM64 || HOST_CPU == CPU_X64
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#f92672>-</span>		<span style=color:#960050;background-color:#1e0010>#</span>define FEAT_AREC DYNAREC_JIT
+</span></span><span style=display:flex><span><span style=color:#f92672>+</span>		<span style=color:#960050;background-color:#1e0010>#</span>define FEAT_AREC DYNAREC_NONE
+</span></span><span style=display:flex><span> 	<span style=color:#75715e>#else
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span> 		<span style=color:#75715e>#define FEAT_AREC DYNAREC_NONE
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span> 	<span style=color:#75715e>#endif
+</span></span></span></code></pre></div><p>Il faut bien faire attention à ajouter nos <code>printf</code>s <em>après</em> l&rsquo;incrementation de PC et l&rsquo;exécution de l&rsquo;instruction. J&rsquo;ai fait l&rsquo;erreur de les mettre au mauvais endroit au début, ce qui me donnait des résultats qui n&rsquo;avaient aucun sens et m&rsquo;a fait perdre énormement de temps. J&rsquo;ai même songé à commencer à reverse la crypto.</p><h1 id=vi---conclusion>VI - Conclusion</h1><p>On peut maintenant essayer plein de combinaisons pour essayer de comprendre sous quelle forme le flag est envoyé de la part du SuperH et si la partie comparée dans l&rsquo;ARM est constante.</p><pre tabindex=0><code>// Test avec 0000000000000000
+SH_flag_solve : CD ^ CF
+SH_flag_solve : == 02
+SH_flag_solve : E3 ^ E7
+SH_flag_solve : == 04
+SH_flag_solve : E5 ^ 94
+SH_flag_solve : == 71
+SH_flag_solve : EB ^ EA
+SH_flag_solve : == 01
+SH_flag_solve : B7 ^ C6
+SH_flag_solve : == 71
+SH_flag_solve : 92 ^ 9A
+SH_flag_solve : == 08
+SH_flag_solve : 25 ^ 21
+SH_flag_solve : == 04
+SH_flag_solve : 05 ^ 07
+SH_flag_solve : == 02
+SH_flag_solve : CD ^ CD
+SH_flag_solve : == 00
+SH_flag_solve : F1 ^ F3
+SH_flag_solve : == 02
+SH_flag_solve : EA ^ EA
+SH_flag_solve : == 00
+SH_flag_solve : 5C ^ 5C
+SH_flag_solve : == 00
+SH_flag_solve : 90 ^ 93
+SH_flag_solve : == 03
+SH_flag_solve : 6A ^ 19
+SH_flag_solve : == 73
+SH_flag_solve : E9 ^ EA
+SH_flag_solve : == 03
+SH_flag_solve : AF ^ A8
+SH_flag_solve : == 07
+// Test avec 0123456789ABCDEF
+SH_flag_solve : CD ^ CF
+SH_flag_solve : == 02
+SH_flag_solve : E3 ^ E6
+SH_flag_solve : == 05
+SH_flag_solve : E5 ^ 96
+SH_flag_solve : == 73
+SH_flag_solve : EB ^ E9
+SH_flag_solve : == 02
+SH_flag_solve : B7 ^ C2
+SH_flag_solve : == 75
+SH_flag_solve : 92 ^ 9F
+SH_flag_solve : == 0D
+SH_flag_solve : 25 ^ 27
+SH_flag_solve : == 02
+SH_flag_solve : 05 ^ 00
+SH_flag_solve : == 05
+SH_flag_solve : CD ^ C5
+SH_flag_solve : == 08
+SH_flag_solve : F1 ^ FA
+SH_flag_solve : == 0B
+SH_flag_solve : EA ^ 9B
+SH_flag_solve : == 71
+SH_flag_solve : 5C ^ 2E
+SH_flag_solve : == 72
+SH_flag_solve : 90 ^ E0
+SH_flag_solve : == 70
+SH_flag_solve : 6A ^ 6D
+SH_flag_solve : == 07
+SH_flag_solve : E9 ^ 9F
+SH_flag_solve : == 76
+SH_flag_solve : AF ^ DE
+SH_flag_solve : == 71
+</code></pre><p>En comparant ces deux résultats, on peut facilement en déduire que la partie provenante de l&rsquo;ARM est constante et que la partie provenante du SuperH est xorée avant d&rsquo;être envoyée. Si on suppose que le flag <code>0000000000000000</code> est bien encodé sous forme de 0, on peut obtenir la clé <code>CFE794EAC69A2107CDF3EA5C9319EAA8</code>. En utilisant cette clé sur le second test, on peut obtenir l&rsquo;alphabet dans lequel le flag est écrit.</p><p>On a donc bien un octet par carractère avec <code>0x00</code> à <code>0x09</code> pour <code>0</code> à <code>9</code> et <code>0x71</code> à <code>0x76</code> pour <code>A</code> à <code>F</code>.</p><p>Pour obtenir le flag, il ne suffit plus qu&rsquo;a xorer la clé avec la partie constante provenant de l&rsquo;ARM. Cela à même déjà été fait pour nous lors de la comparaison du flag <code>0000000000000000</code>. On obtient donc :</p><pre tabindex=0><code>      02 04 71 01 71 08 04 02 00 02 00 00 03 73 03 07
+FCSC{  2  4  A  1  A  8  4  2  0  2  0  0  3  C  3  7  }
+</code></pre><p><img src=/img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-003.png alt="Message de réussite"></p></main><hr><footer>© 2020 - 2022 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>

