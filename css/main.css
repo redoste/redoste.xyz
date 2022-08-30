@@ -1,6 +1,11 @@
 body {
 	background-color: #101010;
 	color:#f8f8f8;
+	max-width: 30cm;
+	margin-left: auto;
+	margin-right: auto;
+	padding-left: 8px;
+	padding-right: 8px;
 }
 
 pre {
