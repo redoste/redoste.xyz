@@ -3,6 +3,13 @@ title: "Projects"
 draft: false
 ---
 
+### [twipo-synchro](https://github.com/redoste/twipo-synchro)
+
+A [ROBOTICS;NOTES ELITE Steam Patch](https://sonome.dareno.me/projects/rne-steam.html)
+mod for interacting with Twipo (in-game Twitter clone) from an in-real-life mobile device.
+
+---
+
 ### [SSPPU](https://github.com/redoste/ssppu)
 
 A simple soft CPU in VHDL designed to run on the Basys 3 FPGA development board.
