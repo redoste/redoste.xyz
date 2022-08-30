@@ -3,13 +3,13 @@ title: "Projects"
 draft: false
 ---
 
-### SSPPU
+### [SSPPU](https://github.com/redoste/ssppu)
 
 A simple soft CPU in VHDL designed to run on the Basys 3 FPGA development board.
 
-[HERE](https://github.com/redoste/ssppu)
+---
 
-### fx-CG50 Manager PLUS - gdbserver
+### [fx-CG50 Manager PLUS - gdbserver](https://github.com/redoste/fx-CG50_Manager_PLUS-gdbserver)
 
 A GDB Remote Serial Protocol implementation that hooks to
 [fx-CG50 Manager PLUS](https://edu.casio.com/products/classroom/fxcgm_plus/)
@@ -19,7 +19,7 @@ It can be used to debug add-ins as well as to help reverse-engineer CASIOWIN.
 Be aware that the emulator is far from being 100% accurate and the firmware is
 different from the one found on real hardware.
 
-[HERE](https://github.com/redoste/fx-CG50_Manager_PLUS-gdbserver)
+---
 
 ### Older projects
 
