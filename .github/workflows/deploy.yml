@@ -17,7 +17,7 @@ jobs:
         fetch-depth: 0
     - name: Install Hugo
       run: |
-        wget https://github.com/gohugoio/hugo/releases/download/v0.101.0/hugo_extended_0.101.0_Linux-64bit.deb -O /tmp/hugo.deb
+        wget https://github.com/gohugoio/hugo/releases/download/v0.104.3/hugo_extended_0.104.3_linux-amd64.deb -O /tmp/hugo.deb
         sudo dpkg -i /tmp/hugo.deb
         sudo apt-get install -fy
         rm -v /tmp/hugo.deb
