@@ -11,7 +11,7 @@ a bored french student interested in information security, opensource software a
 
 # Contact
 
-* [**Twitter**](https://twitter.com/redoste/)
+* [**Twitter**](https://twitter.com/redoste)
 * [**Github**](https://github.com/redoste)
 * **Discord** : `@redoste#7441`
 * **E-Mail** : {{< email >}}
