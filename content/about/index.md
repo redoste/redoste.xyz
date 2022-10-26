@@ -3,13 +3,14 @@ title: "About"
 draft: false
 ---
 
-Hello 👋 !
+* Certified rev witch and cursed computing summoner
+* CTF player
+* Gender SIGSEGVer (any pronouns)
+* French engineering student
+* SciADV enjoyer
 
-I'm *redoste* (any pronouns),
-
-a bored french student interested in information security, opensource software and all this weird stuff.
-
-# Contact
+---
+### Contact
 
 * [**Twitter**](https://twitter.com/redoste)
 * [**Github**](https://github.com/redoste)
