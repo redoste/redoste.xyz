@@ -6,7 +6,6 @@ copyright = "© 2020 - 2022 redoste - [CC-BY-4.0](https://creativecommons.org/li
 enableRobotsTXT = true
 
 [params]
-	showThemeInfo = true
 	dateFormat = "2006-01-02 15:04 -0700"
 
 [outputs]
