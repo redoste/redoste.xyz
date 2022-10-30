@@ -80,7 +80,7 @@ We can now select the main thread and look up in the backtrace. Since we are wai
 
 Well now we should have enough code. Let's go take back a look at the strings. Still no X-Refs ?
 
-After taking a look at the code we just disassembled, there were a lot of references to r2. This reminded me of a concept of PowerPC. The *Small Data Array* or SDA, I have already encourted it when I did some reversing on the [Wii 2 years ago](https://redoste.xyz/2020/04/21/modding-wii-sports-part-i-identifying-files-and-creating-a-debug-output/#ii---reverse-engineering-the-binary).
+After taking a look at the code we just disassembled, there were a lot of references to r2. This reminded me of a concept of PowerPC. The *Small Data Array* or SDA, I have already encourted it when I did some reversing on the [Wii 2 years ago]({{< relref "20200421-wii-sports-modding-1#ii---reverse-engineering-the-binary" >}}).
 
 The quick version is that PowerPC is a RISC architecure and it requires multiple instrctions to load a global, so the compiler will put all the most used globals in the same area and set a register as constant for the entirety of the program. Now when the program needs to use one of those globals it can just reference it relative to the SDA register, this will only require one instruction.
 
@@ -181,7 +181,7 @@ Just reading the syscall name scared me. I knew about thoses. When I understood 
 
 The Synergistic Processing Units or SPUs are small coprocessors that were designed to handle complex calculation pipelines. They run a custom 128-bit SIMD architecture making it quite different from the usual instruction sets we deal with everyday.
 
-This setup is very similiar from last year challenge [*Stars:2ndMix CryptoEdition*](https://redoste.xyz/2021/05/03/fr-write-up-fcsc-2021-stars2ndmix-cryptoedition/) (thus the name of this write-up) but I'm pretty confident we won't be able to just debug on the correct XOR and extract a key that way.
+This setup is very similiar from last year challenge [*Stars:2ndMix CryptoEdition*]({{< relref "20210503-FCSC-2021-Stars-2ndMix-CryptoEdition" >}}) (thus the name of this write-up) but I'm pretty confident we won't be able to just debug on the correct XOR and extract a key that way.
 
 Using the debugger of RPCS3 we can see that 6 SPUs are started. Since the relevant part of the flag is 102 - 5 - 1 = 96 charcters long, each SPUs can be responsible for processing 16 charcters. Coincidentally SPUs work on 128 bits numbers, that looks like a correct assumption.
 
@@ -197,7 +197,7 @@ So let's rebuild RPCS3 with `-g` or with some dumping code in here ? Well let's 
 * **Vulkan SDK** 1.2.198+ (See "Install the SDK" here)
 * SDL2 (for the FAudio backend)
 
-Vulkan SDK doesn't sound fun to deal with so let's try an other route for now. (To be honest it might be fine but when it's not as easy as just installing a `-devel` package, I will first try other solutions - and the tarball is 220MB or 1.1GB extracted (which doesn't feel like a lot after solving [More Hello](https://redoste.xyz/2022/05/08/fr-write-up-fcsc-2022-more-hello/))).
+Vulkan SDK doesn't sound fun to deal with so let's try an other route for now. (To be honest it might be fine but when it's not as easy as just installing a `-devel` package, I will first try other solutions - and the tarball is 220MB or 1.1GB extracted (which doesn't feel like a lot after solving [More Hello]({{< relref "20220508-FCSC-2022-More-Hello" >}}))).
 
 We've got one last option, there is a memory viewer, I have huge vertical secondary screen and the important part is about 6400 bytes. Well I just copy pasted the hex values in a file. Two times because of course the first time I missed some.
 

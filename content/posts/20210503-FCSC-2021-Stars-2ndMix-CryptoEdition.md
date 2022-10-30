@@ -207,7 +207,7 @@ Il s'aggit donc d'une simple constant time comparaison entre le flag tel qu'envo
 
 # V - Modification de Flycast
 
-Une des solutions pour ne pas avoir à comprendre ce genre d'horreur, c'est tout simplement de logguer les opérandes du XOR lors de la comparaison. Pour cela il suffit de modifier l'émulateur de [la même manière que j'avais fait auparavant pour rajouter une sortie de debug dans Wii Sport](https://redoste.xyz/2020/04/21/modding-wii-sports-part-i-identifying-files-and-creating-a-debug-output/#iii---adding-a-custom-debug-output).
+Une des solutions pour ne pas avoir à comprendre ce genre d'horreur, c'est tout simplement de logguer les opérandes du XOR lors de la comparaison. Pour cela il suffit de modifier l'émulateur de [la même manière que j'avais fait auparavant pour rajouter une sortie de debug dans Wii Sport]({{< relref "20200421-wii-sports-modding-1#iii---adding-a-custom-debug-output" >}}).
 
 
 ```c
