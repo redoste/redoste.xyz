@@ -43,7 +43,7 @@ Searching for `SCE` seems to refer to the format [Signed ELF or SELF by Sony](ht
 
 After installing [RPCS3](https://rpcs3.net/) and loading the file, we are greeted by an amazing title screen featuring [Cell](https://en.wikipedia.org/wiki/Cell_(Dragon_Ball)) from Drangon Ball. Here it refers to the [Cell BE](https://en.wikipedia.org/wiki/Cell_(microprocessor)) processor present in the PS3.
 
-!["Please connect to network shell to play" screen](/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-001.png)
+{{< image "\"Please connect to network shell to play\" screen" "img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-001.png" >}}
 
 > "Please connect to network shell to play"
 
@@ -66,7 +66,7 @@ FCSC{AAAAA}
 Please provide a correct input ...
 ```
 
-!["Connected and Playing!" screen](/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-002.png)
+{{< image "\"Connected and Playing!\" screen" "img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-002.png" >}}
 
 Now that we know how the binary behave, let's try to decrypt to SELF and reverse it. Looking arround I found [BreakSelf](https://www.psdevwiki.com/ps3/Dev_Tools#Break_N_Make_.28MakeSelf_.26_BreakSelf.29) capable of doing it. After getting a clean cleartext ELF we can import it into Ghidra to look arround.
 
@@ -86,7 +86,7 @@ The quick version is that PowerPC is a RISC architecure and it requires multiple
 
 Ghidra supports SDA but you need to declare it in the Register Manager. I copied the value of r2 from the debugger and declared it as constant for the entirety of the program. After a quick reanalysis all the accesses relative to r2 are decompiled as global variable accesses.
 
-![Ghidra Register Manager](/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-003.png)
+{{< image "Ghidra Register Manager" "img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-003.png" >}}
 
 We can now follow the strings we looked at earlier. They are referenced from a function with a lot of code. We will just ignore it because it's probably just some calls to PS3 APIs for displaying text on the screen. An intresting part of it is the read of a global variable that will decide if the success of failure text should be shown.
 ```c
@@ -559,4 +559,4 @@ FCSC{30gbt9RzIif5L_s70cRm7gXHm_R-8WkKTVxSjeL5H9gjVnzkSJBg3y4prWG4tU_5-10yxW8uYzW
 Well done, this is a win! :-)
 ```
 
-!["You Win!" screen](/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-004.png)
+{{< image "\"You Win!\" screen" "img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-004.png" >}}

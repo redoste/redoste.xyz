@@ -101,10 +101,10 @@ ENCODE KCLTXT:glf_course_fc1.obj -> KCL:./glf_course_fc1.kcl
 ```
 
 Here is what `glf_course_fc1.obj` looks like imported into Blender :
-![glf_course_fc1.obj imported in Blender](/img/20200421-wii-sports-modding-1/fc1_imported_in_blender.png)
+{{< image "glf_course_fc1.obj imported in Blender" "img/20200421-wii-sports-modding-1/fc1_imported_in_blender.png" >}}
 
 Since `wkclt` have been thought for *Mario Kart Wii* the objects are not correctly named but they correspond to the different kind of ground available in the game (Green, Bunker, etc.) :
-![List of objects in Blender](/img/20200421-wii-sports-modding-1/fc1_imported_in_blender_objects_list.png)
+{{< image "List of objects in Blender" "img/20200421-wii-sports-modding-1/fc1_imported_in_blender_objects_list.png" >}}
 
 ## 2 - The `G3D/*.brres` files
 
@@ -113,12 +113,12 @@ The [`brres` files](http://wiki.tockdom.com/wiki/BRRES_(File_Format)) are some s
 *BrawlBox* is a huge Windows tool that allow easy manipulation of `brres` archives and its different sections. Because I use GNU/Linux I had to do a little bit of tinkering to run *BrawlBox* with *Wine*. Installing `dotnet48` using `winetricks` seems to do the job.
 
 Here is what `G3D/glf_course_fc1.brres` looks like in BrawlBox :
-![glf_couse_fc1.brres opened in BrawlBox](/img/20200421-wii-sports-modding-1/fc1_course_brres.png)
+{{< image "glf_couse_fc1.brres opened in BrawlBox" "img/20200421-wii-sports-modding-1/fc1_course_brres.png" >}}
 
 The other `brres` file: `G3D/glf_map_fc1.brres` corresponds to the minimap visible in game in the bottom left corner. The map in it self is at the exact same scale as the original, it is only scaled down at the final rendering, making the creation of the map from the original course really easy.
 
 Here is what `G3D/glf_map_fc1.brres` looks like in BrawlBox :
-![glf_map_fc1.brres opened in BrawlBox](/img/20200421-wii-sports-modding-1/fc1_map_brres.png)
+{{< image "glf_map_fc1.brres opened in BrawlBox" "img/20200421-wii-sports-modding-1/fc1_map_brres.png" >}}
 
 ## 3 - The `glf_scene_fc1/*.p*` files
 
@@ -242,8 +242,8 @@ sys.stderr.buffer.flush()
 
 After packing everything back up, we can rebuild the game image and admire this amazing flat golf course with flying trees, starting point and ending point !
 
-![Screenshot of the first golf course but flat 1](/img/20200421-wii-sports-modding-1/fc1_flat_screenshot_1.png)
-![Screenshot of the first golf course but flat 2](/img/20200421-wii-sports-modding-1/fc1_flat_screenshot_2.png)
+{{< image "Screenshot of the first golf course but flat 1" "img/20200421-wii-sports-modding-1/fc1_flat_screenshot_1.png" >}}
+{{< image "Screenshot of the first golf course but flat 2" "img/20200421-wii-sports-modding-1/fc1_flat_screenshot_2.png" >}}
 
 # II - Reverse-engineering the binary
 

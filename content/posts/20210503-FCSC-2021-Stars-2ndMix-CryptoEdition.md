@@ -14,7 +14,7 @@ tags:
 
 Il nous est indiqué dans la description du challenge que celui avait été testé avec [Flycast](https://github.com/flyinghead/flycast), on télécharge donc le code source et on utilise `cmake` pour le compiler. On peut ensuite l'executer et ouvrir l'image disque fournie.
 
-![Zone de texte du flag](/img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-001.png)
+{{< image "Zone de texte du flag" "img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-001.png" >}}
 
 Après nous avoir accueilli (sous fond de superbe chiptune), on nous invite alors à rentrer un flag au format `FCSC{0123456789ABCDEF}` et le programme nous indique si celui-ci est valide ou non.
 
@@ -203,7 +203,7 @@ char SH_flag_solve(size_t len,char *buf) {
 
 Il s'aggit donc d'une simple constant time comparaison entre le flag tel qu'envoyé par le SuperH et un buffer interne. Celui-ci semble être constamment modifié et les fonctions qui en sont responsables sont plutôt *conséquantes*.
 
-![Une de ces fonctions *conséquantes*](/img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-002.png)
+{{< image "Une de ces fonctions *conséquantes*" "img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-002.png" >}}
 
 # V - Modification de Flycast
 
@@ -340,4 +340,4 @@ Pour obtenir le flag, il ne suffit plus qu'a xorer la clé avec la partie consta
 FCSC{  2  4  A  1  A  8  4  2  0  2  0  0  3  C  3  7  }
 ```
 
-![Message de réussite](/img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-003.png)
+{{< image "Message de réussite" "img/20210503-FCSC-2021-Stars-2ndMix-CryptoEdition/Stars-2ndMix-CryptoEdition-003.png" >}}

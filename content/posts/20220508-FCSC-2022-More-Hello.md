@@ -17,7 +17,7 @@ more_hello: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynami
 ```
 Premier reflexe, on importe le binaire dans Ghidra pour avoir une idée de ce qu'il fait.
 
-![Capture d'écran de Ghidra comportant des erreurs de désassemblage](/img/20220508-FCSC-2022-More-Hello/More-Hello-001.png)
+{{< image "Capture d'écran de Ghidra comportant des erreurs de désassemblage" "img/20220508-FCSC-2022-More-Hello/More-Hello-001.png" >}}
 
 Oh non.
 
@@ -234,7 +234,7 @@ J'ai quand même eu l'idée de rechercher les valeurs d'un tableau de constantes
 
 Après pas mal de temps à step dans GDB je retombe sur ce même tableau et me rends compte de mon erreur, après une nouvelle recherche avec les bonnes valeurs, je me suis détesté pendant les 6 heures suivantes en lisant le premier résultat :
 
-![Résultat d'une recherche Google avec la page Wikipedia de SHA-2 en tête](/img/20220508-FCSC-2022-More-Hello/More-Hello-002.png)
+{{< image "Résultat d'une recherche Google avec la page Wikipedia de SHA-2 en tête" "img/20220508-FCSC-2022-More-Hello/More-Hello-002.png" >}}
 
 3 fonctions : init, update, final : les 3 fonctions de (quasi-)tous les algorithmes de hash.
 
