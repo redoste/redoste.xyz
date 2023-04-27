@@ -12,8 +12,7 @@ draft: false
 ---
 ### Contact
 
-* [**Twitter**](https://twitter.com/redoste)
-* [**Github**](https://github.com/redoste)
-* **Discord** : `@redoste#7441`
+* **Github** : [redoste](https://github.com/redoste)
 * **E-Mail** : {{< email >}}
+* **Twitter** : Account now in "read-only", I'm only keeping the handle registered : [@redoste](https://twitter.com/redoste)
 
