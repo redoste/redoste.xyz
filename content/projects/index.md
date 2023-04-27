@@ -3,6 +3,12 @@ title: "Projects"
 draft: false
 ---
 
+### [rkhv](https://github.com/redoste/rkhv)
+
+WIP Type-1 hobby hypervisor using Intel VMX for x86-64 EFI PCs.
+
+---
+
 ### [twipo-synchro](https://github.com/redoste/twipo-synchro)
 
 A [ROBOTICS;NOTES ELITE Steam Patch](https://sonome.dareno.me/projects/rne-steam.html)
