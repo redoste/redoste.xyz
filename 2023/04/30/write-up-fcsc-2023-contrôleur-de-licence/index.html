@@ -1,0 +1,247 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2023 : Contrôleur de licence - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2023 : Contrôleur de licence</h2><span class=date>2023-04-30 22:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2023/>FCSC 2023</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>At first glace, <em>Contrôleur de licence</em> seems to be a classic Windows reverse challenge. We give an input in the arguments and we get a &ldquo;Invalid serial&rdquo; <code>MessageBox</code> in response.</p><p>After importing the binary in Ghidra, we can already spot a few suspicious imports, such as <code>CreateDecompressor</code> and <code>Decompress</code> from <code>CABINET.DLL</code> or <code>WriteProcessMemory</code> and <code>SetThreadContext</code> from <code>KERNEL32.DLL</code>.</p><p>It looks like the program will need to decompress data and modify the execution from other processes, this might be some kind of custom packer for the underlying input checking binary.</p><h1 id=ii---reversing-the-loader>II - Reversing the loader</h1><p>By looking at the main function we can easily spot two stage, the decompression and the loading of the binary :</p><p>The decompression just looks for a <code>.etext</code> section and use <code>CABINET.DLL</code> for decompressing its content.</p><p>I didn&rsquo;t look that much into it since it&rsquo;s basicaly just parsing PE structures but it boils down to this pseudocode :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>for</span> each sections {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (strncmp(section_name, <span style=color:#e6db74>&#34;.etext&#34;</span>, <span style=color:#ae81ff>6</span>) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>        decompressed_data <span style=color:#f92672>=</span> VirtualAlloc(NULL, decompressed_data_buffer_size, <span style=color:#ae81ff>0x3000</span>, <span style=color:#ae81ff>4</span>);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (decompressed_data <span style=color:#f92672>!=</span> NULL) {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> ((CreateDecompressor(<span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0</span>, <span style=color:#f92672>&amp;</span>decompressor_handle) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) <span style=color:#f92672>&amp;&amp;</span>
+</span></span><span style=display:flex><span>                (Decompress(decompressor_handle,
+</span></span><span style=display:flex><span>                            compressed_data, compressed_data_size,
+</span></span><span style=display:flex><span>                            decompressed_data, decompressed_data_buffer_size, <span style=color:#f92672>&amp;</span>decompressed_data_size) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)) {
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>if</span> (argc <span style=color:#f92672>==</span> <span style=color:#ae81ff>3</span>) {
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>if</span> (child_fn(<span style=color:#f92672>&amp;</span>decompressed_data) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>                        (<span style=color:#f92672>*</span>(code <span style=color:#f92672>*</span>)entrypoint)();
+</span></span><span style=display:flex><span>                    }
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>                    <span style=color:#66d9ef>goto</span> PARENT_PART;
+</span></span><span style=display:flex><span>                }
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>break</span>;
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>By looking at <a href=https://learn.microsoft.com/en-us/windows/win32/api/compressapi/nf-compressapi-createdecompressor#parameters>the documentation</a> we can find that the algorithm used is LZMS. This seems to be a not that well-known compression method that is mostly used in Microsoft proprietary formats such as WIM archives.</p><p>The easiest way to get the decompressed data out is to debug the process and dump the content of the region allocated by <code>VirtualAlloc</code> right after the <code>Decompress</code> call. We indeed get a PE file :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file controleur-de-licence_000001C822770000.bin
+</span></span><span style=display:flex><span>controleur-de-licence_000001C822770000.bin: PE32+ executable (DLL) (GUI) x86-64, for MS Windows, 6 sections
+</span></span></code></pre></div><p>Let&rsquo;s import it into Ghidra to look at it :</p><img src=/img/20230430-FCSC-2023-Controleur-de-licence/Controleur-de-licence-001.png alt="Ghidra screenshot with meaningless disassembly"><p>Ugh, something is not <em>quite</em> right. I think we will need to dig deeper in the loader code.</p><p>In the previous pseudocode listing, before jumping to the entrypoint of the freshly decompressed PE, we check if we are called with 2 arguments and call <code>child_fn</code>. <code>child_fn</code> in it self is quite boring, it looks like a PE parser and probably just maps the sections according to the header. However we can spot a surpsing twist :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (current_section<span style=color:#f92672>-&gt;</span>name[i]) <span style=color:#f92672>!=</span> <span style=color:#e6db74>&#34;.text&#34;</span>[i])
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>goto</span> NOT_TEXT;
+</span></span><span style=display:flex><span>    i <span style=color:#f92672>=</span> i <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>} <span style=color:#66d9ef>while</span> (i <span style=color:#f92672>!=</span> <span style=color:#ae81ff>6</span>);
+</span></span><span style=display:flex><span>memset(current_section<span style=color:#f92672>-&gt;</span>data, <span style=color:#ae81ff>0xcc</span>, current_section<span style=color:#f92672>-&gt;</span>size);
+</span></span><span style=display:flex><span>NOT_TEXT:
+</span></span></code></pre></div><p>The loader fills the <code>.text</code> section with <code>0xcc</code> which corresponds at <code>int3</code> in x86 : a call to the debugger.
+So the PE file we decompressed doesn&rsquo;t contain the code in itself, as its section will be overwritten by the loader anyway.</p><p>But this entier part is only relevant if <code>argc == 3</code>, when we call the binary with the input as an argument, <code>argc</code> is 2. Let&rsquo;s take a quick look at the <code>PARENT_PART</code> of <code>main</code> :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>snprintf(cmdline, <span style=color:#66d9ef>sizeof</span>(cmdline), <span style=color:#e6db74>&#34;%s %s %d&#34;</span>, <span style=color:#f92672>*</span>argv, argv[<span style=color:#ae81ff>1</span>], <span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>ret <span style=color:#f92672>=</span> CreateProcessA(NULL, cmdline, NULL,
+</span></span><span style=display:flex><span>                     NULL, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0x12</span>, NULL,
+</span></span><span style=display:flex><span>                     NULL, <span style=color:#f92672>&amp;</span>startup_info, <span style=color:#f92672>&amp;</span>process_info);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>    CloseHandle(process_info.hThread);
+</span></span><span style=display:flex><span>    parent_fn(<span style=color:#f92672>&amp;</span>decompressed_data, pcVar4, process_info.hProcess);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>So the packer will first create a child process with an extra argument <code>1</code> that will lead to the code full of <code>int3</code>.</p><p>Looking at <code>parent_fn</code> might not be that surprising : we see calls to <code>WaitForDebugEvent</code>, <code>OpenThread</code>, <code>WriteProcessMemory</code>, <code>GetThreadContext</code> and <code>SetThreadContext</code>. We are probably in the situation where the child process is being supervised by the parent one and when it hits an <code>int3</code>, the parent process will replace it with an other instruction.</p><p>The function in itself seems quite complex but we can easily understand its structure :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>while</span> (<span style=color:#ae81ff>1</span>) {
+</span></span><span style=display:flex><span>    WaitForDebugEvent(<span style=color:#f92672>&amp;</span>debug_event_data, <span style=color:#ae81ff>0xffffffff</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (debug_event_data.dwDebugEventCode <span style=color:#f92672>!=</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>||</span>
+</span></span><span style=display:flex><span>        debug_event_data.u.Exception.ExceptionRecord.ExceptionCode <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0x80000003</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    hThread <span style=color:#f92672>=</span> OpenThread(<span style=color:#ae81ff>0x1a</span>, <span style=color:#ae81ff>0</span>, debug_event_data.dwThreadId);
+</span></span><span style=display:flex><span>    SuspendThread(hThread);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    VirtualProtectEx(hProcess, old_address, <span style=color:#ae81ff>0x10</span>, <span style=color:#ae81ff>4</span>, <span style=color:#f92672>&amp;</span>old_protection);
+</span></span><span style=display:flex><span>    WriteProcessMemory(hProcess, old_address, <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc\xcc</span><span style=color:#e6db74>&#34;</span>, <span style=color:#ae81ff>0x10</span>, <span style=color:#f92672>&amp;</span>written),
+</span></span><span style=display:flex><span>    VirtualProtectEx(hProcess, old_address, <span style=color:#ae81ff>0x10</span>, old_protection, <span style=color:#f92672>&amp;</span>old_old_protection);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    GetThreadContext(hThread, <span style=color:#f92672>&amp;</span>thread_context);
+</span></span><span style=display:flex><span>    old_address <span style=color:#f92672>=</span> thread_context.Rip <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    thread_context.Rip <span style=color:#f92672>=</span> old_address;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>/* [[[ insert here some magic involving BCRYPT.DLL doing MD5 on thread_context.Rip ]]] */</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    VirtualProtectEx(hProcess, old_address, <span style=color:#ae81ff>0x10</span>, <span style=color:#ae81ff>4</span>, <span style=color:#f92672>&amp;</span>old_protection);
+</span></span><span style=display:flex><span>    WriteProcessMemory(hProcess, old_address, magic_output, <span style=color:#ae81ff>0x10</span>, <span style=color:#f92672>&amp;</span>written),
+</span></span><span style=display:flex><span>    VirtualProtectEx(hProcess, old_address, <span style=color:#ae81ff>0x10</span>, old_protection, <span style=color:#f92672>&amp;</span>old_old_protection);
+</span></span><span style=display:flex><span>    FlushInstructionCache(hProcess, old_address, <span style=color:#ae81ff>0x10</span>);
+</span></span><span style=display:flex><span>    SetThreadContext(hThread, <span style=color:#f92672>&amp;</span>thread_context);
+</span></span><span style=display:flex><span>    ResumeThread(hThread);
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>In the end, the parent process will wait for the child to hit an <code>int3</code>, will replace the instruction it&rsquo;s currently at and resume it while making sure to replace back the instruction with <code>int3</code> on the next call.</p><p>We could try to understand what magic lies in the middle and where the newly written instructions come from but by looking at it briefly we can already easily conclude on the nature of it : the value of <code>rip</code> is hashed in MD5 with <code>BCRYPT.DLL</code> and the hash is reduced with a huge mess of <code>xor</code>s.</p><p>This is probably some kind of hash table where the key is the current value of <code>rip</code> and the value is the instructions to write. As <code>parent_fn</code> also takes a pointer to the decompressed PE binary, we can assume that the hash table is stored in the <code>.text</code> section of the binary we extracted.</p><p>We could try to understand how this table works and manualy dump its content, but it looks like a hunge pain. Let&rsquo;s not do that.</p><h1 id=iii---not-reversing-the-hash-table>III - <em>Not</em> reversing the hash table</h1><p>In the end the binary knows how to get the values out of the hash table, so we will instrument it to dump it for us.</p><p>Since all the I/O we will need with this method is done through calls to <code>KERNEL32.DLL</code> functions, I had the idea to replace them with our own implementation that will mimick the execution of the child process.</p><p>Introducing&mldr; <code>KERNOL32.DLL</code> !</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;windows.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdint.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>FILE <span style=color:#f92672>*</span>outfile <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) BOOL CreateProcessA(
+</span></span><span style=display:flex><span>        LPCSTR                lpApplicationName,
+</span></span><span style=display:flex><span>        LPSTR                 lpCommandLine,
+</span></span><span style=display:flex><span>        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+</span></span><span style=display:flex><span>        LPSECURITY_ATTRIBUTES lpThreadAttributes,
+</span></span><span style=display:flex><span>        BOOL                  bInheritHandles,
+</span></span><span style=display:flex><span>        DWORD                 dwCreationFlags,
+</span></span><span style=display:flex><span>        LPVOID                lpEnvironment,
+</span></span><span style=display:flex><span>        LPCSTR                lpCurrentDirectory,
+</span></span><span style=display:flex><span>        LPSTARTUPINFOA        lpStartupInfo,
+</span></span><span style=display:flex><span>        LPPROCESS_INFORMATION lpProcessInformation
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (outfile <span style=color:#f92672>==</span> NULL) {
+</span></span><span style=display:flex><span>        outfile <span style=color:#f92672>=</span> fopen(<span style=color:#e6db74>&#34;Z:</span><span style=color:#ae81ff>\\</span><span style=color:#e6db74>kernol32output.txt&#34;</span>, <span style=color:#e6db74>&#34;w&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> TRUE;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) BOOL WaitForDebugEvent(
+</span></span><span style=display:flex><span>    LPDEBUG_EVENT lpDebugEvent,
+</span></span><span style=display:flex><span>    DWORD         dwMilliseconds
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    lpDebugEvent<span style=color:#f92672>-&gt;</span>dwDebugEventCode <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    lpDebugEvent<span style=color:#f92672>-&gt;</span>u.Exception.ExceptionRecord.ExceptionCode <span style=color:#f92672>=</span> <span style=color:#ae81ff>0x80000003</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> TRUE;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) HANDLE OpenThread(
+</span></span><span style=display:flex><span>    DWORD dwDesiredAccess,
+</span></span><span style=display:flex><span>    BOOL  bInheritHandle,
+</span></span><span style=display:flex><span>    DWORD dwThreadId
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0x41414141</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) DWORD SuspendThread(
+</span></span><span style=display:flex><span>    HANDLE hThread
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0x1337</span>;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) BOOL VirtualProtectEx(
+</span></span><span style=display:flex><span>    HANDLE hProcess,
+</span></span><span style=display:flex><span>    LPVOID lpAddress,
+</span></span><span style=display:flex><span>    SIZE_T dwSize,
+</span></span><span style=display:flex><span>    DWORD  flNewProtect,
+</span></span><span style=display:flex><span>    PDWORD lpflOldProtect
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> TRUE;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) BOOL WriteProcessMemory(
+</span></span><span style=display:flex><span>    HANDLE  hProcess,
+</span></span><span style=display:flex><span>    LPVOID  lpBaseAddress,
+</span></span><span style=display:flex><span>    LPCVOID lpBuffer,
+</span></span><span style=display:flex><span>    SIZE_T  nSize,
+</span></span><span style=display:flex><span>    SIZE_T  <span style=color:#f92672>*</span>lpNumberOfBytesWritten
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    fprintf(outfile, <span style=color:#e6db74>&#34;WPM %p &#34;</span>, lpBaseAddress);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> nSize; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        fprintf(outfile, <span style=color:#e6db74>&#34;%02hhx&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)lpBuffer)[i]);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    fprintf(outfile, <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> TRUE;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>uint64_t</span> RIP <span style=color:#f92672>=</span> <span style=color:#ae81ff>0x180001000</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>__declspec</span>(dllexport) BOOL GetThreadContext(
+</span></span><span style=display:flex><span>    HANDLE    hThread,
+</span></span><span style=display:flex><span>    LPCONTEXT lpContext
+</span></span><span style=display:flex><span>) {
+</span></span><span style=display:flex><span>    lpContext<span style=color:#f92672>-&gt;</span>Rip <span style=color:#f92672>=</span> RIP;
+</span></span><span style=display:flex><span>    RIP<span style=color:#f92672>++</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (RIP <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0x180003000</span>) {
+</span></span><span style=display:flex><span>        fflush(outfile);
+</span></span><span style=display:flex><span>        fclose(outfile);
+</span></span><span style=display:flex><span>        exit(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> TRUE;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>This simple DLL will simulate all the calls required by the packer without spawning the child process at any point.</p><p>However to be able to fully replace <code>KERNEL32.DLL</code> we need to let through most of the other imports required by the binary. This can be done with <a href="https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170">export declaration pointing to an other module</a>. On MinGW this can be achieved simply by putting strings in the <code>.drectve</code> section of an object :</p><pre tabindex=0><code>.section .drectve
+.ascii &#34; -export:GetCurrentProcess=KERNEL32.GetCurrentProcess&#34;
+.ascii &#34; -export:FlushInstructionCache=KERNEL32.FlushInstructionCache&#34;
+.ascii &#34; -export:ReadFile=KERNEL32.ReadFile&#34;
+.ascii &#34; -export:GetModuleFileNameA=KERNEL32.GetModuleFileNameA&#34;
+.ascii &#34; -export:GetFileSizeEx=KERNEL32.GetFileSizeEx&#34;
+.ascii &#34; -export:VirtualProtect=KERNEL32.VirtualProtect&#34;
+.ascii &#34; -export:HeapFree=KERNEL32.HeapFree&#34;
+.ascii &#34; -export:VirtualFree=KERNEL32.VirtualFree&#34;
+.ascii &#34; -export:VirtualAlloc=KERNEL32.VirtualAlloc&#34;
+.ascii &#34; -export:CreateFileA=KERNEL32.CreateFileA&#34;
+.ascii &#34; -export:LoadLibraryA=KERNEL32.LoadLibraryA&#34;
+.ascii &#34; -export:CloseHandle=KERNEL32.CloseHandle&#34;
+.ascii &#34; -export:HeapAlloc=KERNEL32.HeapAlloc&#34;
+.ascii &#34; -export:GetProcAddress=KERNEL32.GetProcAddress&#34;
+.ascii &#34; -export:GetProcessHeap=KERNEL32.GetProcessHeap&#34;
+.ascii &#34; -export:FreeLibrary=KERNEL32.FreeLibrary&#34;
+//.ascii &#34; -export:WriteProcessMemory=KERNEL32.WriteProcessMemory&#34;
+//.ascii &#34; -export:WaitForDebugEvent=KERNEL32.WaitForDebugEvent&#34;
+//.ascii &#34; -export:SuspendThread=KERNEL32.SuspendThread&#34;
+.ascii &#34; -export:ResumeThread=KERNEL32.ResumeThread&#34;
+.ascii &#34; -export:ContinueDebugEvent=KERNEL32.ContinueDebugEvent&#34;
+.ascii &#34; -export:GetLastError=KERNEL32.GetLastError&#34;
+//.ascii &#34; -export:VirtualProtectEx=KERNEL32.VirtualProtectEx&#34;
+//.ascii &#34; -export:GetThreadContext=KERNEL32.GetThreadContext&#34;
+.ascii &#34; -export:GetModuleHandleW=KERNEL32.GetModuleHandleW&#34;
+.ascii &#34; -export:TerminateProcess=KERNEL32.TerminateProcess&#34;
+//.ascii &#34; -export:CreateProcessA=KERNEL32.CreateProcessA&#34;
+.ascii &#34; -export:SetThreadContext=KERNEL32.SetThreadContext&#34;
+//.ascii &#34; -export:OpenThread=KERNEL32.OpenThread&#34;
+.ascii &#34; -export:SetUnhandledExceptionFilter=KERNEL32.SetUnhandledExceptionFilter&#34;
+.ascii &#34; -export:UnhandledExceptionFilter=KERNEL32.UnhandledExceptionFilter&#34;
+.ascii &#34; -export:IsProcessorFeaturePresent=KERNEL32.IsProcessorFeaturePresent&#34;
+.ascii &#34; -export:QueryPerformanceCounter=KERNEL32.QueryPerformanceCounter&#34;
+.ascii &#34; -export:GetCurrentProcessId=KERNEL32.GetCurrentProcessId&#34;
+.ascii &#34; -export:GetCurrentThreadId=KERNEL32.GetCurrentThreadId&#34;
+.ascii &#34; -export:GetSystemTimeAsFileTime=KERNEL32.GetSystemTimeAsFileTime&#34;
+.ascii &#34; -export:IsDebuggerPresent=KERNEL32.IsDebuggerPresent&#34;
+.ascii &#34; -export:InitializeSListHead=KERNEL32.InitializeSListHead&#34;
+</code></pre><p>Now we just have to throw the binary in a hexeditor and change <code>KERNEL32.DLL</code> to <code>KERNOL32.DLL</code> and start the binary. We obtain a text file in the following format :</p><pre tabindex=0><code>WPM 0000000180000fff a29f51fa05b58372c7cccccccccccccc
+WPM 0000000180001000 488d0539460000cccccccccccccccccc
+WPM 0000000180001001 52cccccccccccccccccccccccccccccc
+WPM 0000000180001002 5bcccccccccccccccccccccccccccccc
+WPM 0000000180001003 cfcccccccccccccccccccccccccccccc
+WPM 0000000180001005 190d36b309e5cccccccccccccccccccc
+WPM 0000000180001006 a3a5e07f1e2db256aacccccccccccccc
+WPM 0000000180001007 c3cccccccccccccccccccccccccccccc
+WPM 0000000180001010 4889542410cccccccccccccccccccccc
+WPM 0000000180001011 9dcccccccccccccccccccccccccccccc
+...
+</code></pre><p>However, we can&rsquo;t simply throw all of those into a PE file and reverse it independently as x86 has variable-length instructions, we don&rsquo;t know where <code>rip</code> will exactly go and a lot of those values from the hash table will probably never get used.</p><p>I tried different solutions to guess the length of the instructions but what worked the best was to not try to fill the entire file at once.</p><p>I wrote a simple Python script that place instructions one after the other in the file and will stops when it hits a <code>int3</code>. That way, I imported the binary in Ghidra, looked for empty functions, started the script with the address of the missing function in argument, reloaded and reanalysed the binary and ended up repeating that process a bunch of times until I was satisfied with the output.</p><h1 id=iv---analysing-the-dumped-binary>IV - Analysing the dumped binary</h1><p>We now have a simple PE, that looks like a DLL, with the verification logic. Since the most difficult part of the challenge was the packer and its hash table, it should be fairly trivial to understand the key check.</p><p>In the end it boils down to the following checks :</p><ul><li>Input is in the format &ldquo;<code>KEY-XXX-YYYYYYY</code>&rdquo;</li><li><code>XXX != 222 && XXX != 333 && XXX &lt; 999</code></li><li><code>(~(XXX & 777) & (input[4] ^ input[8] ^ (XXX | 777))) != 0</code></li><li><code>sum(digits of YYYYYYY) % 7 == 0</code></li><li><code>sha256(input) == 0a8e35559ba20ebbc7c4db37dda07dfd3e86cf2245796da12e0b66534515ae7f</code></li></ul><p>If the input matches all the checks, it is used as a AES key to decrypt the flag.</p><p>At the beginning, I was surprised by the number of possibilities for the first 4 checks and I ended up spending way too much time trying to find a mistake in my understanding of the binary or a bug in my bruteforcing logic.</p><p>After a while I just gave up and tried bruteforcing with a faster language than Python and the answer was found fast enough, I think I should try to be more confident in myself <code>:/</code></p><h1 id=v---conclusion>V - Conclusion</h1><p>In the end the bruteforcing logic can be written pretty easily :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdint.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;openssl/sha.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>char</span> expected_hash[] <span style=color:#f92672>=</span> <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\x0a\x8e\x35\x55\x9b\xa2\x0e\xbb\xc7\xc4\xdb\x37\xdd\xa0\x7d\xfd\x3e\x86\xcf\x22\x45\x79\x6d\xa1\x2e\x0b\x66\x53\x45\x15\xae\x7f</span><span style=color:#e6db74>&#34;</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>uint32_t</span> KEY1 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; KEY1 <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>1000</span>; KEY1<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (KEY1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>222</span>) <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (KEY1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>333</span>) <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>uint32_t</span> KEY2 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; KEY2 <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>10000000</span>; KEY2<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> buffer[<span style=color:#ae81ff>32</span>];
+</span></span><span style=display:flex><span>            sprintf(buffer, <span style=color:#e6db74>&#34;KEY-%03u-%07u&#34;</span>, KEY1, KEY2);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> ui4 <span style=color:#f92672>=</span> buffer[<span style=color:#ae81ff>4</span>];
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> ui8 <span style=color:#f92672>=</span> buffer[<span style=color:#ae81ff>8</span>];
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> ((((KEY1 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>777</span>) <span style=color:#f92672>^</span> <span style=color:#ae81ff>0xffffffff</span>) <span style=color:#f92672>&amp;</span> (ui4 <span style=color:#f92672>^</span> ui8 <span style=color:#f92672>^</span> (KEY1 <span style=color:#f92672>|</span> <span style=color:#ae81ff>777</span>))) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>int</span> u <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>7</span>; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>                u <span style=color:#f92672>+=</span> buffer[<span style=color:#ae81ff>8</span><span style=color:#f92672>+</span>i];
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (u <span style=color:#f92672>%</span> <span style=color:#ae81ff>7</span> <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) <span style=color:#66d9ef>continue</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> ((KEY2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0x7fff</span>) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%s...</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buffer);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>char</span> hash[SHA256_DIGEST_LENGTH];
+</span></span><span style=display:flex><span>            SHA256(buffer, <span style=color:#ae81ff>3</span><span style=color:#f92672>+</span><span style=color:#ae81ff>1</span><span style=color:#f92672>+</span><span style=color:#ae81ff>3</span><span style=color:#f92672>+</span><span style=color:#ae81ff>1</span><span style=color:#f92672>+</span><span style=color:#ae81ff>7</span>, hash);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> (memcmp(hash, expected_hash, SHA256_DIGEST_LENGTH) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buffer);
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buffer);
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, buffer);
+</span></span><span style=display:flex><span>                exit(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ time ./solve
+</span></span><span style=display:flex><span>KEY-644-5958868
+</span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>real    10m4.940s
+</span></span><span style=display:flex><span>user    10m3.778s
+</span></span><span style=display:flex><span>sys     0m0.075s
+</span></span></code></pre></div><p>We can give this input to the binary and get the flag :</p><img src=/img/20230430-FCSC-2023-Controleur-de-licence/Controleur-de-licence-002.png alt="Windows MessageBox showing the flag : FCSC{W1ND0W5-95-r37411-Pr0DUC7-K3Y}"><p>After reading the flag, I instantly remembered where I have already seen this kind of checks. The <code>!= 222</code> and <code>!= 333</code> are pretty rememberable and I had already seen a <a href=https://youtu.be/cwyH59nACzQ>video on the Windows 95 key check</a>. This might have saved me all the time I spent reverifying my interpreation of the code.</p></main><hr><footer>© 2020 - 2023 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
