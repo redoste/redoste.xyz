@@ -8,10 +8,6 @@ tags:
 - FCSC 2023
 ---
 
-> **NOTE** : This is the version of the write-up that was sent to the FCSC organizers as part of the selection for the ECSC. I was in a rush for the deadline and I'm not completely satisfied with it : it goes too straight to the point and lacks a lot of details.
->
-> I will try to complete it in the future, if I have the motivation to do so and don't forget about it (i.e. this is not guaranteed *at all*).
-
 # I - Intro
 
 *Video Games Awards* or *VGA*[^1] consists of a floppy image that can be booted with a virtualization or emulation software.
