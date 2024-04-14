@@ -124,7 +124,7 @@ We could try to understand what magic lies in the middle and where the newly wri
 
 This is probably some kind of hash table where the key is the current value of `rip` and the value is the instructions to write. As `parent_fn` also takes a pointer to the decompressed PE binary, we can assume that the hash table is stored in the `.text` section of the binary we extracted.
 
-We could try to understand how this table works and manualy dump its content, but it looks like a hunge pain. Let's not do that.
+We could try to understand how this table works and manualy dump its content, but it looks like a huge pain. Let's not do that.
 
 # III - *Not* reversing the hash table
 
@@ -298,7 +298,7 @@ In the end it boils down to the following checks :
  * `sum(digits of YYYYYYY) % 7 == 0`
  * `sha256(input) == 0a8e35559ba20ebbc7c4db37dda07dfd3e86cf2245796da12e0b66534515ae7f`
 
-If the input matches all the checks, it is used as a AES key to decrypt the flag.
+If the input matches all the checks, it is used as an AES key to decrypt the flag.
 
 At the beginning, I was surprised by the number of possibilities for the first 4 checks and I ended up spending way too much time trying to find a mistake in my understanding of the binary or a bug in my bruteforcing logic.
 
