@@ -1,0 +1,720 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2024 : Kraken - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2024 : Kraken</h2><span class=date>2024-04-14 22:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2024/>FCSC 2024</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>Kraken</em> looks like a fairly complex reversing challenge. We are given a few more files at the start in addition
+to the binary, the most important one being a <code>Dockerfile</code> that sets up a specific environement required to run
+the program easily.</p><p>A quick look at this <code>Dockerfile</code> will tease us about what we are about to endure:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-dockerfile data-lang=dockerfile><span style=display:flex><span><span style=color:#66d9ef>FROM</span><span style=color:#e6db74> debian:bookworm-slim</span><span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span><span style=color:#66d9ef>WORKDIR</span><span style=color:#e6db74> /build</span><span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span><span style=color:#66d9ef>RUN</span> echo <span style=color:#e6db74>&#34;deb-src http://http.us.debian.org/debian bookworm main&#34;</span> &gt;&gt; /etc/apt/sources.list <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    apt-get update                                            <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    apt-get install -qy --no-install-recommends                  <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        dpkg-dev                                                 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        build-essential                                          <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        fakeroot                                                 <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        devscripts                                               <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        clinfo                                                   <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        llvm-spirv-15                                            <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>        ocl-icd-libopencl1                                    <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    <span style=color:#75715e># Dependencies for pocl compilation                          \</span>
+</span></span><span style=display:flex><span>    apt-get source pocl-opencl-icd                            <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    apt-get build-dep -qy pocl-opencl-icd                     <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    apt-get clean                                             <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    rm -rf /var/lib/apt/lists/                                <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    cd pocl-3.1                                               <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    DEB_BUILD_OPTIONS<span style=color:#f92672>=</span><span style=color:#e6db74>&#34;notest nocheck nodocs&#34;</span> debuild -us -uc <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    cd ..                                                     <span style=color:#f92672>&amp;&amp;</span> <span style=color:#ae81ff>\
+</span></span></span><span style=display:flex><span><span style=color:#ae81ff></span>    dpkg -i *.deb<span style=color:#960050;background-color:#1e0010>
+</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span><span style=color:#66d9ef>WORKDIR</span><span style=color:#e6db74> /app</span><span style=color:#960050;background-color:#1e0010>
+</span></span></span></code></pre></div><p>Ugh&mldr; <code>llvm-spirv-15</code>, <code>pocl-opencl-icd</code>, it sounds like we are about to see some GPU shenanigans.</p><h1 id=ii---first-look-and-extracting-the-spir-v-code>II - First look and extracting the SPIR-V code</h1><p>First of all we will import the main ELF binary in Ghidra. It&rsquo;s a x86-64 linux program,
+we can fairly easily see that the <code>main()</code> will expect a file path to be passed as an arguement.
+The file will be opened and entierly read in memory.</p><p>Once it&rsquo;s loaded a few headers are checked, a magic is looked up and it gives us a hint that
+the file should be a <a href=https://en.wikipedia.org/wiki/Netpbm#PPM_example>binary netpbm image</a> as
+they are recognizable by their first line being <code>P6</code>.</p><p>This is the easiest image format you can imagine, a simple text header specifying the size of the
+image and the depth of the colors, then you just yeet the pixels in binary RGB from left to right,
+top to bottom.</p><p>The size of the image is checked to be at least <code>0x100000</code> pixels long with 8 bits per colors.</p><p>There are a few oddities when the file is parsed, maybe I was doing something wrong but I only
+managed to get the parser to accept P6 files with a comment in the header:</p><pre tabindex=0><code>P6
+#~
+1024 1024
+255
+[pixels]
+</code></pre><p>A simple function then splits the channels in three different buffers and&mldr;</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>if</span> (split_channels(file <span style=color:#f92672>+</span> hdr_len, len, r, g, b) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>goto</span> out;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>fprintf(stdout, <span style=color:#e6db74>&#34;[+] OK: loaded %s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, file_name);
+</span></span><span style=display:flex><span>free(file);
+</span></span><span style=display:flex><span><span style=color:#75715e>// [...]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>sha256_init(state);
+</span></span><span style=display:flex><span>sha256_update(state, <span style=color:#e6db74>&#34;UNLEASH_THE_KRAKEN_&#34;</span>, <span style=color:#ae81ff>0x13</span>);
+</span></span><span style=display:flex><span>sha256_update(state, r, <span style=color:#ae81ff>0x100000</span>);
+</span></span><span style=display:flex><span>sha256_update(state, g, <span style=color:#ae81ff>0x100000</span>);
+</span></span><span style=display:flex><span>sha256_update(state, b, <span style=color:#ae81ff>0x100000</span>);
+</span></span><span style=display:flex><span>sha256_final(state, hash);
+</span></span><span style=display:flex><span>r <span style=color:#f92672>=</span> memcmp(hash, <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\x98\x58\xe1\x8b\x40\xae\x29\x0a\x05\x30\x86\xca\x3a\x39\xfd\x2f</span><span style=color:#e6db74>&#34;</span>
+</span></span><span style=display:flex><span>                 <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\xfc\x9f\x31\x99\x4a\x37\xf7\x7d\x3c\xf6\x82\xb6\xaa\xeb\x58\x31</span><span style=color:#e6db74>&#34;</span>, <span style=color:#ae81ff>32</span>) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span><span style=color:#75715e>// (the memcmp is unrolled but that&#39;s not the point)
+</span></span></span></code></pre></div><p>Yep sure, so the solution is obviously to crack the SHA256 hash on about 3MiB of data! :)</p><p>More seriously it&rsquo;s pretty surprising to see the challenge done this way: its fairly common in reversing challenges
+to have a crackable check that you are supposed to understand and reverse and a second &ldquo;cryptographically secure&rdquo; check
+that will make sure you provided the unique valid input before showing the flag.</p><p>Here the situation is reversed, the unbreakable check is done before, thus we need to patch the binary to be able to go
+further and analyse dynamically what&rsquo;s happening during the part we really need to understand.</p><p>The patch is the most obvious one, you just change the following <code>jnz</code> in a bunch of <code>nop</code>s.</p><p>Now let&rsquo;s not spend 15 years trying to understand how the binary works and how it sets up all the OpenCL context:
+we were spoiled by the Dockerfile that most of the challenge will probably be about reversing some SPIR-V code,
+let&rsquo;s just follow some intresting x-refs like the import <code>clCreateProgramWithIL</code>:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>    prg1[i <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> KEYSTREAM[(i <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>) <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>] <span style=color:#f92672>^</span> PROG_1[i <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>];
+</span></span><span style=display:flex><span>    prg1[i] <span style=color:#f92672>=</span> KEYSTREAM[i <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>] <span style=color:#f92672>^</span> PROG_1[i];
+</span></span><span style=display:flex><span>    i <span style=color:#f92672>=</span> i <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>;
+</span></span><span style=display:flex><span>} <span style=color:#66d9ef>while</span> (i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0x2780</span>);
+</span></span><span style=display:flex><span>PROG_1_ID <span style=color:#f92672>=</span> clCreateProgramWithIL(context, prg1, <span style=color:#ae81ff>0x2780</span>, <span style=color:#f92672>&amp;</span>err);
+</span></span></code></pre></div><p>And this is repeated for 3 different programs, this is a simple XOR cipher that can be decrypted with a few lines
+of python:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>f <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;kraken&#34;</span>, <span style=color:#e6db74>&#34;rb&#34;</span>)
+</span></span><span style=display:flex><span>f<span style=color:#f92672>.</span>seek(<span style=color:#ae81ff>0x6430</span>)
+</span></span><span style=display:flex><span>keystream <span style=color:#f92672>=</span> f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>0x100</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>f<span style=color:#f92672>.</span>seek(<span style=color:#ae81ff>0x6530</span>)
+</span></span><span style=display:flex><span>prog1 <span style=color:#f92672>=</span> f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>0x2780</span>)
+</span></span><span style=display:flex><span>prog2 <span style=color:#f92672>=</span> f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>0x2cc4</span>)
+</span></span><span style=display:flex><span>f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>12</span>)
+</span></span><span style=display:flex><span>prog3 <span style=color:#f92672>=</span> f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>0x14dc</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>f<span style=color:#f92672>.</span>close()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> (n, prog) <span style=color:#f92672>in</span> enumerate((prog1, prog2, prog3)):
+</span></span><span style=display:flex><span>    prog_dec <span style=color:#f92672>=</span> []
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (i, x) <span style=color:#f92672>in</span> enumerate(prog):
+</span></span><span style=display:flex><span>        prog_dec<span style=color:#f92672>.</span>append(x <span style=color:#f92672>^</span> keystream[i <span style=color:#f92672>%</span> <span style=color:#ae81ff>0x100</span>])
+</span></span><span style=display:flex><span>    open(<span style=color:#e6db74>&#34;prog</span><span style=color:#e6db74>%d</span><span style=color:#e6db74>.spirv&#34;</span> <span style=color:#f92672>%</span> (n<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>), <span style=color:#e6db74>&#34;wb&#34;</span>)<span style=color:#f92672>.</span>write(bytes(prog_dec))
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file *.spirv
+</span></span><span style=display:flex><span>prog1.spirv: Khronos SPIR-V binary, little-endian, version 0x010400, generator 0x06000e
+</span></span><span style=display:flex><span>prog2.spirv: Khronos SPIR-V binary, little-endian, version 0x010400, generator 0x06000e
+</span></span><span style=display:flex><span>prog3.spirv: Khronos SPIR-V binary, little-endian, version 0x010000, generator 0x06000e
+</span></span></code></pre></div><p>Poking around a little bit in the binary we can easily see that each channels will be treated separately before being checked
+against an hardcoded expected output.</p><h1 id=iii---reversing-the-spir-v-code>III - Reversing the SPIR-V code</h1><p>The first obvious idea is to disassemble the SPIR-V bytecode, a quick Google search later we learn that we
+can use <code>spirv-dis</code> from the <a href=https://vulkan.lunarg.com/sdk/home>Vulkan SDK</a>.</p><p>In the end I mostly used the <a href=https://www.khronos.org/spir/visualizer/>SPIR-V Visualizer</a> on Khronos website.
+As the SPIR-V IL is a <a href=https://en.wikipedia.org/wiki/Static_single-assignment_form>static single-assignment</a> IR
+it&rsquo;s very easy to compile but very hard for a human to keep track in what&rsquo;s happening: a &ldquo;variable&rdquo; is only used once
+and you end up with things like &ldquo;%1337 is xorred with %42 which is the mod of %99 and %6666, %99 is loaded from %76 at
+index %12&mldr;&rdquo;.</p><p>This visualizer helps you see the expressions in the form of a tree and you can easily click around to see
+what values depend on what.</p><img src=/img/20240414-FCSC-2024-Kraken/Kraken-001.png alt="`prog1.spirv` opened in the SPIR-V Visualizer: the disassembly is on the left and the tree of a simple expression on the right"><p>It really helped me understanding what was happening in each exported functions (known as &ldquo;kernels&rdquo;) of each programs.
+After looking around for a bit I managed to understand the following:</p><ul><li><code>c</code> in <code>prog1</code> loads a pixel, apply <code>z</code> and saves it back</li><li><code>b</code> in <code>prog1</code> loads pixels in a loop with a body very similar to <code>z</code></li><li><code>b</code> in <code>prog2</code> is just a buch of s-boxes</li><li><code>a</code>, <code>b</code> and <code>c</code> in <code>prog3</code> look similar: they apply some operation between two images, this can be<ul><li>add: <code>out[i] = img0[i] + img1[i]</code></li><li>sub: <code>out[i] = img0[i] - img1[i]</code></li><li>xor: <code>out[i] = img0[i] ^ img1[i]</code></li><li>rotate left: <code>out[i] = img0[i] rol img1[i]</code></li><li>using the other image as an index: <code>out[img1[i]] = img0[i]</code></li></ul></li></ul><h1 id=iv---instrumenting-the-transormations>IV - Instrumenting the transormations</h1><p>After having a rough idea of what the SPIR-V code was used for I wanted to track <em>when</em> it was used. As I guessed the &ldquo;hard&rdquo; part
+of the challenge would mostly be about understanding what the SPIR-V was doing, I wanted to go the easy way and just log which kernel
+was called and with what input as to not spend too much time reversing the main binary.</p><p>For that I simply followed the x-refs of <code>clFinish</code>, it is used to wait for a OpenCL job to end. It&rsquo;s only used in a single function
+that is responsible to setup a job, copy the input buffers and launch the actual job.</p><p>It was a pretty tedious process as the structure is quite big and the OpenCL API is not that intuitive. I have some (very limited)
+background experience with OpenGL, as it has some common ideas it helped a little.</p><p>In the end I wrote the following code, intended to be injected as a shared object using <code>LD_PRELOAD</code>:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;assert.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdlib.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;sys/mman.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdint.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;string.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;unistd.h&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>char</span> undefined;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>char</span> byte;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>char</span> dwfenc;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> dword;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> qword;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> uint;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> ulong;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>char</span> undefined1;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> undefined4;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>long</span> undefined8;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>short</span> ushort;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>short</span> word;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>struct</span> cl_program cl_program;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>__attribute__((packed)) <span style=color:#66d9ef>struct</span> cl_program {
+</span></span><span style=display:flex><span>    undefined8 context;
+</span></span><span style=display:flex><span>    undefined8 dev_id;
+</span></span><span style=display:flex><span>    undefined8 program;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>char</span> <span style=color:#f92672>*</span>kernel_name;
+</span></span><span style=display:flex><span>    uint work_dim;
+</span></span><span style=display:flex><span>    undefined4 _pad2;
+</span></span><span style=display:flex><span>    ulong dims[<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>    uint n_write_bufs;
+</span></span><span style=display:flex><span>    uint write_buf_is_kernel_arg[<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>    uint write_buf_len[<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>    undefined4 _pad0;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>write_buf_ptr[<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>    uint n_read_bufs;
+</span></span><span style=display:flex><span>    uint read_buf_len[<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>    undefined4 _pad1;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>read_buf_ptr[<span style=color:#ae81ff>20</span>];
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>static_assert(<span style=color:#66d9ef>sizeof</span>(cl_program) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x308</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>#define run_cl_program_start_addr 0x555555555d80
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#define run_cl_program_end_addr   0x555555556188
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span> PROG_1 <span style=color:#f92672>=</span> (<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555863130</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span> PROG_2 <span style=color:#f92672>=</span> (<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555863140</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span> PROG_3 <span style=color:#f92672>=</span> (<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555863150</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>const</span> cl_program<span style=color:#f92672>*</span> cur_prg <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> size_t cur_mul_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>run_cl_program_trace</span>(<span style=color:#66d9ef>const</span> cl_program<span style=color:#f92672>*</span> prg) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>program <span style=color:#f92672>==</span> <span style=color:#f92672>*</span>PROG_1) {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:1&#34;</span>);
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>program <span style=color:#f92672>==</span> <span style=color:#f92672>*</span>PROG_2) {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:2&#34;</span>);
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>program <span style=color:#f92672>==</span> <span style=color:#f92672>*</span>PROG_3) {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:3&#34;</span>);
+</span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:0x%zx&#34;</span>, prg<span style=color:#f92672>-&gt;</span>program);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34; krnl=%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, prg<span style=color:#f92672>-&gt;</span>kernel_name);
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;%u dims &#34;</span>, prg<span style=color:#f92672>-&gt;</span>work_dim);
+</span></span><span style=display:flex><span>    size_t mul_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>work_dim; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        mul_size <span style=color:#f92672>*=</span> prg<span style=color:#f92672>-&gt;</span>dims[i];
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%u&#34;</span>, prg<span style=color:#f92672>-&gt;</span>dims[i]);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>work_dim<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>) {
+</span></span><span style=display:flex><span>            putc(<span style=color:#e6db74>&#39; &#39;</span>, stdout);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    cur_mul_size <span style=color:#f92672>=</span> mul_size;
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;%u wbuf %u rbuf</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, prg<span style=color:#f92672>-&gt;</span>n_write_bufs, prg<span style=color:#f92672>-&gt;</span>n_read_bufs);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>n_write_bufs; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>write_buf_is_kernel_arg[i]) {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;w[%zu] = &#34;</span>, i);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>write_buf_len[i]; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)prg<span style=color:#f92672>-&gt;</span>write_buf_ptr[i])[j]);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        } <span style=color:#66d9ef>else</span> {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;w[%zu] = &#34;</span>, i);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>write_buf_len[i] <span style=color:#f92672>*</span> mul_size; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)prg<span style=color:#f92672>-&gt;</span>write_buf_ptr[i])[j]);
+</span></span><span style=display:flex><span>            }
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cur_prg <span style=color:#f92672>=</span> prg;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>run_cl_program_end_trace</span>(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (cur_prg <span style=color:#f92672>==</span> NULL) {
+</span></span><span style=display:flex><span>        fprintf(stderr, <span style=color:#e6db74>&#34;oopsie</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        abort();
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> cur_prg<span style=color:#f92672>-&gt;</span>n_read_bufs; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;r[%zu] = &#34;</span>, i);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> cur_prg<span style=color:#f92672>-&gt;</span>read_buf_len[i] <span style=color:#f92672>*</span> cur_mul_size; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)cur_prg<span style=color:#f92672>-&gt;</span>read_buf_ptr[i])[j]);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    cur_prg <span style=color:#f92672>=</span> NULL;
+</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;===</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>__attribute__((<span style=color:#66d9ef>naked</span>)) <span style=color:#66d9ef>void</span> run_cl_program_hook(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>asm</span>(<span style=color:#e6db74>&#34;push %rdi;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;call run_cl_program_trace;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %rdi;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %rbp;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %r15;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %r14;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %r13;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %r12;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %rbx;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;sub $0x38, %rsp;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;mov $0x555555555d8e, %rax;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;jmp *%rax;&#34;</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>__attribute__((<span style=color:#66d9ef>naked</span>)) <span style=color:#66d9ef>void</span> run_cl_program_end_hook(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>asm</span>(<span style=color:#e6db74>&#34;pop %rbx;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %r12;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %r13;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %r14;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %r15;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %rbp;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;push %rax;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;call run_cl_program_end_trace;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %rax;&#34;</span>
+</span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;ret;&#34;</span>);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>__attribute__((constructor)) <span style=color:#66d9ef>void</span> instr_init(<span style=color:#66d9ef>int</span> argc, <span style=color:#66d9ef>char</span><span style=color:#f92672>**</span> argv) {
+</span></span><span style=display:flex><span>    assert(argc <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (strcmp(argv[<span style=color:#ae81ff>0</span>], <span style=color:#e6db74>&#34;./kraken-patched&#34;</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// We check that we are running attached to `kraken-patched` as we will
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// also be preloaded with `gdbserver`
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#66d9ef>return</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mprotect((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555555000</span>, <span style=color:#ae81ff>0x5000</span>, PROT_READ<span style=color:#f92672>|</span>PROT_WRITE<span style=color:#f92672>|</span>PROT_EXEC);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mprotect&#34;</span>);
+</span></span><span style=display:flex><span>        _exit(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>uint8_t</span> code[] <span style=color:#f92672>=</span> {
+</span></span><span style=display:flex><span>            <span style=color:#ae81ff>0x48</span>, <span style=color:#ae81ff>0xb8</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#ae81ff>0xad</span>, <span style=color:#ae81ff>0xc0</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#ae81ff>0xad</span>, <span style=color:#ae81ff>0xc0</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#75715e>// movabs rax, imm64
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>            <span style=color:#ae81ff>0xff</span>, <span style=color:#ae81ff>0xe0</span>,                                                 <span style=color:#75715e>// jmp rax
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        };
+</span></span><span style=display:flex><span>        <span style=color:#f92672>*</span>(<span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span>)(code <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>) <span style=color:#f92672>=</span> (<span style=color:#66d9ef>uint64_t</span>)run_cl_program_hook;
+</span></span><span style=display:flex><span>        memcpy((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)run_cl_program_start_addr, code, <span style=color:#66d9ef>sizeof</span>(code));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>uint8_t</span> code[] <span style=color:#f92672>=</span> {
+</span></span><span style=display:flex><span>            <span style=color:#ae81ff>0x48</span>, <span style=color:#ae81ff>0xbb</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#ae81ff>0xad</span>, <span style=color:#ae81ff>0xc0</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#ae81ff>0xad</span>, <span style=color:#ae81ff>0xc0</span>, <span style=color:#ae81ff>0xde</span>, <span style=color:#75715e>// movabs rbx, imm64
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>            <span style=color:#ae81ff>0xff</span>, <span style=color:#ae81ff>0xe3</span>,                                                 <span style=color:#75715e>// jmp rbx
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        };
+</span></span><span style=display:flex><span>        <span style=color:#f92672>*</span>(<span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span>)(code <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>) <span style=color:#f92672>=</span> (<span style=color:#66d9ef>uint64_t</span>)run_cl_program_end_hook;
+</span></span><span style=display:flex><span>        memcpy((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)run_cl_program_end_addr, code, <span style=color:#66d9ef>sizeof</span>(code));
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> mprotect((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555555000</span>, <span style=color:#ae81ff>0x5000</span>, PROT_READ<span style=color:#f92672>|</span>PROT_EXEC);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mprotect&#34;</span>);
+</span></span><span style=display:flex><span>        _exit(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>As there isn&rsquo;t enough free space at the beginning and end of the function I was hooking, I manualy copied its prologue
+and epilogue in my own code.</p><p>You might have noticed that all the addresses are hardcoded in the <code>0x55555...</code> range, this is because to simplify the process
+I was running the program within GDB. However as explained in the introduction, the program is running in a Docker container.
+To make it more pleasant to use my host GDB, I used a <code>gdbserver</code> with the <code>--disable-randomization</code> option to make sure ASLR
+is disabled. However this requires the process to change personality with <code>personality(ADDR_NO_RANDOMIZE)</code> and this is only
+allowed in <a href=https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities>privileged contaiers</a><sup id=fnref:1><a href=#fn:1 class=footnote-ref role=doc-noteref>1</a></sup>.</p><p>With this logging I was able to get a pretty rough idea of when each OpenCL program was called and with which inputs.
+Now I needed to understand some functions I was missing, for that I wanted to run them with my own inputs. I looked up
+solutions to run SPIR-V code on a CPU easily: the &ldquo;official&rdquo; solution is to convert SPIR-V IR to LLVM IR before compiling it
+for your host CPU. If you are a very attentive reader you might have already noticed in the <code>Dockerfile</code> that we installed
+some packages related to LLVM, this is exactly why it&rsquo;s required: most of the time we run OpenCL programs on dedicated
+hardware (such as a GPU) but for making the challenge easier to run the authors provided us with a container already configured
+to run everything on the CPU.</p><p>Now the goal was to use this feature for ourselves to easily try different inputs. For that you can use
+<a href=https://github.com/KhronosGroup/SPIRV-LLVM-Translator><code>llvm-spirv</code></a>, it will produce a LLVM bitcode file that can be
+linked with other LLVM bitcode.</p><p>I simply used <code>clang</code> to compile a bit of C++ that will run the SPIR-V program with a few inputs, for example this is
+how I looked at the output produced by <code>b()</code> in the program 1:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-cpp data-lang=cpp><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdint&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;cstdio&gt;</span><span style=color:#75715e>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>extern</span> <span style=color:#e6db74>&#34;C&#34;</span> <span style=color:#66d9ef>void</span> b(...);
+</span></span><span style=display:flex><span><span style=color:#66d9ef>extern</span> <span style=color:#e6db74>&#34;C&#34;</span> <span style=color:#66d9ef>void</span> c(...);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>int</span> global_id[<span style=color:#ae81ff>16</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span><span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> <span style=color:#a6e22e>get_global_id</span>(<span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span> d) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> global_id[d];
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint8_t</span> w0[] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>1</span>};
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint8_t</span> w1[] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>1</span>};
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>uint8_t</span> r0[<span style=color:#ae81ff>4</span>] <span style=color:#f92672>=</span> {<span style=color:#ae81ff>0</span>};
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>2</span>; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>2</span>; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>            global_id[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>=</span> i;
+</span></span><span style=display:flex><span>            global_id[<span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> j;
+</span></span><span style=display:flex><span>            b(<span style=color:#f92672>&amp;</span>w0, <span style=color:#f92672>&amp;</span>w1, <span style=color:#ae81ff>2</span>, <span style=color:#ae81ff>2</span>, <span style=color:#f92672>&amp;</span>r0);
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%02x %02x</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, r0[<span style=color:#ae81ff>0</span>], r0[<span style=color:#ae81ff>1</span>]);
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%02x %02x</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, r0[<span style=color:#ae81ff>2</span>], r0[<span style=color:#ae81ff>3</span>]);
+</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        }
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>Notice that we are using C++ here, this is because the bitcode generated by <code>llvm-spirv</code> expects to be linked with an
+object containing the function <code>get_global_id</code> that should return the ID of the current workload in a specific dimension.
+However the name of the function is using C++ mangling, the easiest way to deal with it was simply to write the main driving
+code in C++. The name of the exported functions were not mangled, this is why we use <code>export "C"</code> in front of their declaration.</p><p>I tried to look at the result produced by the different functions and I even tried to generate all the possible values for
+functions with a single 8 bit integer as parameter, but I still couldn&rsquo;t make sense of some of them.</p><p>If only we had a way to look into what this binary we just built ourselve was doing&mldr; wait a second.</p><h1 id=v---cheating-and-making-this-a-x86-challenge-with-llvm>V - Cheating and making this a x86 challenge with LLVM</h1><p>We <code>clang -O0 -g</code> all of those nicely provided LLVM bitcodes, import them into Ghidra and we get a nice, easy to understand
+decompilation for each function!</p><p>In the end I was able to identify what all of the functions were doing:</p><ul><li><code>c</code> in <code>prog1</code> apply a power in GF(256) on each input pixel with <em>a catch</em><ul><li>the result is xored with <code>0xab</code> and they are offseted from the input matrix by <code>p</code> elements,
+with <code>p</code> the index in the array of allowed powers</li></ul></li><li><code>b</code> in <code>prog1</code> does matrix multiplication in GF(256) with <em>another catch</em><ul><li>each element of the output matrix is added with <code>x + y</code></li></ul></li><li><code>b</code> in <code>prog2</code> is indeed a few s-boxes</li><li><code>a</code>, <code>b</code> and <code>c</code> in <code>prog3</code> are indeed applying the operations described earlier but with an important difference:<ul><li><code>a</code> is working on 32 bit integers</li><li><code>b</code> is working on 16 bit integers</li><li><code>c</code> is working on 8 bit integers</li></ul></li></ul><p>It took a bit of time to understand that <code>c</code> and <code>b</code> of <code>prog1</code> are doing multiplications in GF(256), as I previously tried to understand
+what they were doing with the bruteforce approch. By looking at all the possible inputs I was able to understand that it was
+&ldquo;multiplication on 8 bits but it goes whack when overflowing&rdquo;. In the end having the Ghidra decompilation realy helped as I was able
+to Google &ldquo;multiplication xor with <code>0x1b</code>&rdquo; to find it out.</p><p>Cross-referencing my results with the <a href=https://en.wikipedia.org/wiki/Rijndael_MixColumns#Galois_Multiplication_lookup_tables>table used in AES</a>
+helped to confirm it.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>gid_y <span style=color:#f92672>=</span> get_global_id(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>gid_x <span style=color:#f92672>=</span> get_global_id(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>local_20 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>local_19 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (width <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>  local_20 <span style=color:#f92672>=</span> gid_y <span style=color:#f92672>*</span> width;
+</span></span><span style=display:flex><span>  local_75 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>  i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>  <span style=color:#66d9ef>do</span> {
+</span></span><span style=display:flex><span>    bVar1 <span style=color:#f92672>=</span> w0[i <span style=color:#f92672>+</span> local_20];
+</span></span><span style=display:flex><span>    bVar2 <span style=color:#f92672>=</span> w1[i <span style=color:#f92672>*</span> height <span style=color:#f92672>+</span> gid_x];
+</span></span><span style=display:flex><span>    local_7d <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>1</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_7d <span style=color:#f92672>=</span> bVar1;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_85 <span style=color:#f92672>=</span> bVar1 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)bVar1) {
+</span></span><span style=display:flex><span>      local_85 <span style=color:#f92672>=</span> bVar1 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_88 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>2</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_88 <span style=color:#f92672>=</span> local_85;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_8a <span style=color:#f92672>=</span> local_85 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)local_85) {
+</span></span><span style=display:flex><span>      local_8a <span style=color:#f92672>=</span> local_85 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_8d <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>4</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_8d <span style=color:#f92672>=</span> local_8a;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_8f <span style=color:#f92672>=</span> local_8a <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)local_8a) {
+</span></span><span style=display:flex><span>      local_8f <span style=color:#f92672>=</span> local_8a <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_92 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_92 <span style=color:#f92672>=</span> local_8f;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_94 <span style=color:#f92672>=</span> local_8f <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)local_8f) {
+</span></span><span style=display:flex><span>      local_94 <span style=color:#f92672>=</span> local_8f <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_97 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0x10</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_97 <span style=color:#f92672>=</span> local_94;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_99 <span style=color:#f92672>=</span> local_94 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)local_94) {
+</span></span><span style=display:flex><span>      local_99 <span style=color:#f92672>=</span> local_94 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_9c <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0x20</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_9c <span style=color:#f92672>=</span> local_99;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_9e <span style=color:#f92672>=</span> local_99 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)local_99) {
+</span></span><span style=display:flex><span>      local_9e <span style=color:#f92672>=</span> local_99 <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_a1 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ((bVar2 <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0x40</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span>      local_a1 <span style=color:#f92672>=</span> local_9e;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_a3 <span style=color:#f92672>=</span> local_9e <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span> <span style=color:#f92672>^</span> <span style=color:#ae81ff>0x1b</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)local_9e) {
+</span></span><span style=display:flex><span>      local_a3 <span style=color:#f92672>=</span> local_9e <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_a6 <span style=color:#f92672>=</span> local_a3;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> (<span style=color:#66d9ef>char</span>)bVar2) {
+</span></span><span style=display:flex><span>      local_a6 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>    local_75 <span style=color:#f92672>=</span> local_7d <span style=color:#f92672>^</span> local_75 <span style=color:#f92672>^</span> local_88 <span style=color:#f92672>^</span> local_8d <span style=color:#f92672>^</span> local_92 <span style=color:#f92672>^</span> local_97 <span style=color:#f92672>^</span> local_9c <span style=color:#f92672>^</span>
+</span></span><span style=display:flex><span>               local_a1 <span style=color:#f92672>^</span> local_a6;
+</span></span><span style=display:flex><span>    i <span style=color:#f92672>=</span> i <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    local_19 <span style=color:#f92672>=</span> local_75;
+</span></span><span style=display:flex><span>  } <span style=color:#66d9ef>while</span> (i <span style=color:#f92672>&lt;</span> width);
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>r0[local_20 <span style=color:#f92672>+</span> gid_x] <span style=color:#f92672>=</span> local_19 <span style=color:#f92672>^</span> ((<span style=color:#66d9ef>char</span>)gid_x <span style=color:#f92672>+</span> (<span style=color:#66d9ef>char</span>)gid_y);
+</span></span></code></pre></div><h1 id=vi---putting-everything-together-and-meeting-the-maths>VI - Putting everything together and meeting the maths</h1><p>It took a bit of time to use the trace we generated in part IV and cross reference it with the decompilation of the main
+binary to understand how each transformation were used, but it was not too hard.</p><p>The most difficult part at this stage was to understand why some of those inputs were seemingly coming from nowhere. They
+were neither hardcoded as they differed from multiple traces with different inputs, but they didn&rsquo;t seem to be coming from
+part of previous transormations either.</p><p>In the end I was able to reverse 3 functions, all based around the same concept of using some recursive SHA256 as a
+sort of PRNG, responsible for these inputs. I named them <code>sha256_tri_matrix</code>, <code>sha256_matrix</code> and <code>sha256_stream</code>.</p><p>The most intresting one is <code>sha256_tri_matrix</code> as it used everytime the matrix multiplication is involved, generating a triangular
+matrix ensure we will be able to find an inverse.</p><p>Once those functions were identified it was fairly easy to track were they were used, even when they were aggressively inlined
+by the compiler.</p><p>A few of them were using as a seed <code>r[0] ^ g[100] ^ b[200]</code>, this is now the only unknown of our problem.</p><p>Well it&rsquo;s time for bruteforcing.</p><p>256 possibilites is not a lot but as the script involves a lot of matrix multiplication and inversion it&rsquo;s still pretty long,
+this is why I tried to make the bruteforce as late as possible by caching all the results not dependent on this seed beforehand.</p><h1 id=vii---conclusion>VII - Conclusion</h1><p>In the end this is my solve script:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span><span style=color:#f92672>import</span> sys
+</span></span><span style=display:flex><span><span style=color:#f92672>import</span> struct
+</span></span><span style=display:flex><span><span style=color:#f92672>from</span> hashlib <span style=color:#f92672>import</span> sha256
+</span></span><span style=display:flex><span><span style=color:#f92672>import</span> numpy <span style=color:#66d9ef>as</span> np
+</span></span><span style=display:flex><span><span style=color:#f92672>import</span> galois
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>GF256 <span style=color:#f92672>=</span> galois<span style=color:#f92672>.</span>GF(<span style=color:#ae81ff>256</span>, irreducible_poly<span style=color:#f92672>=</span><span style=color:#ae81ff>0x11b</span>)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>sha256_tri_matrix</span>(seed, size):
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> bytes([seed] <span style=color:#f92672>+</span> [<span style=color:#ae81ff>0</span>]<span style=color:#f92672>*</span><span style=color:#ae81ff>0x1f</span>)
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> sha256(state)<span style=color:#f92672>.</span>digest()
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> (size<span style=color:#f92672>*</span>size)
+</span></span><span style=display:flex><span>    x <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>    i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> x <span style=color:#f92672>&lt;</span> size:
+</span></span><span style=display:flex><span>        y <span style=color:#f92672>=</span> x
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>while</span> x <span style=color:#f92672>&lt;</span> size:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> i <span style=color:#f92672>==</span> <span style=color:#ae81ff>8</span>:
+</span></span><span style=display:flex><span>                state <span style=color:#f92672>=</span> sha256(state)<span style=color:#f92672>.</span>digest()
+</span></span><span style=display:flex><span>                i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>            out[y<span style=color:#f92672>*</span>size <span style=color:#f92672>+</span> x] <span style=color:#f92672>=</span> state[i<span style=color:#f92672>*</span><span style=color:#ae81ff>4</span>]
+</span></span><span style=display:flex><span>            i <span style=color:#f92672>+=</span> <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>if</span> x <span style=color:#f92672>==</span> y <span style=color:#f92672>and</span> out[y<span style=color:#f92672>*</span>size<span style=color:#f92672>+</span>x] <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>:
+</span></span><span style=display:flex><span>                <span style=color:#66d9ef>pass</span>
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>                x <span style=color:#f92672>+=</span> <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>        x <span style=color:#f92672>=</span> y <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>sha256_stream</span>(seed, size, mask):
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> bytes([seed <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>] <span style=color:#f92672>+</span> [<span style=color:#ae81ff>0</span>]<span style=color:#f92672>*</span><span style=color:#ae81ff>0x1f</span>)
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> sha256(state)<span style=color:#f92672>.</span>digest()
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> size
+</span></span><span style=display:flex><span>    j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(size):
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> j <span style=color:#f92672>==</span> <span style=color:#ae81ff>8</span>:
+</span></span><span style=display:flex><span>            state <span style=color:#f92672>=</span> sha256(state)<span style=color:#f92672>.</span>digest()
+</span></span><span style=display:flex><span>            j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>        v <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;I&#34;</span>, state[j<span style=color:#f92672>*</span><span style=color:#ae81ff>4</span>:(j<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>4</span>])[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>&amp;</span> mask
+</span></span><span style=display:flex><span>        out[i] <span style=color:#f92672>=</span> v
+</span></span><span style=display:flex><span>        j <span style=color:#f92672>+=</span> <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>sha256_matrix</span>(seed, size):
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> bytes([seed <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>] <span style=color:#f92672>+</span> [<span style=color:#ae81ff>0</span>]<span style=color:#f92672>*</span><span style=color:#ae81ff>0x1f</span>)
+</span></span><span style=display:flex><span>    state <span style=color:#f92672>=</span> sha256(state)<span style=color:#f92672>.</span>digest()
+</span></span><span style=display:flex><span>    out <span style=color:#f92672>=</span> list(range(size))
+</span></span><span style=display:flex><span>    j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(size, <span style=color:#ae81ff>0</span>, <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>):
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> j <span style=color:#f92672>==</span> <span style=color:#ae81ff>8</span>:
+</span></span><span style=display:flex><span>            state <span style=color:#f92672>=</span> sha256(state)<span style=color:#f92672>.</span>digest()
+</span></span><span style=display:flex><span>            j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>
+</span></span><span style=display:flex><span>        idx <span style=color:#f92672>=</span> struct<span style=color:#f92672>.</span>unpack(<span style=color:#e6db74>&#34;I&#34;</span>, state[j<span style=color:#f92672>*</span><span style=color:#ae81ff>4</span>:(j<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>4</span>])[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>        j <span style=color:#f92672>+=</span> <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>        idx <span style=color:#f92672>=</span> idx <span style=color:#f92672>%</span> i
+</span></span><span style=display:flex><span>        x <span style=color:#f92672>=</span> out[i <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>]
+</span></span><span style=display:flex><span>        out[i <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> out[idx]
+</span></span><span style=display:flex><span>        out[idx] <span style=color:#f92672>=</span> x
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> out
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>inv_prog3</span>(r0, w1, op, n):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> len(r0) <span style=color:#f92672>==</span> len(w1)
+</span></span><span style=display:flex><span>    mask <span style=color:#f92672>=</span> (<span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;&lt;</span> n) <span style=color:#f92672>-</span> <span style=color:#ae81ff>1</span>
+</span></span><span style=display:flex><span>    w0 <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> len(r0)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(r0)):
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> op <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>: <span style=color:#75715e># ADD</span>
+</span></span><span style=display:flex><span>            w0[i] <span style=color:#f92672>=</span> (r0[i] <span style=color:#f92672>-</span> w1[i]) <span style=color:#f92672>&amp;</span> mask
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>elif</span> op <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>: <span style=color:#75715e># SUB</span>
+</span></span><span style=display:flex><span>            w0[i] <span style=color:#f92672>=</span> (r0[i] <span style=color:#f92672>+</span> w1[i]) <span style=color:#f92672>&amp;</span> mask
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>elif</span> op <span style=color:#f92672>==</span> <span style=color:#ae81ff>2</span>: <span style=color:#75715e># XOR</span>
+</span></span><span style=display:flex><span>            w0[i] <span style=color:#f92672>=</span> (r0[i] <span style=color:#f92672>^</span> w1[i]) <span style=color:#f92672>&amp;</span> mask
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>elif</span> op <span style=color:#f92672>==</span> <span style=color:#ae81ff>3</span>: <span style=color:#75715e># ROL</span>
+</span></span><span style=display:flex><span>            s <span style=color:#f92672>=</span> w1[i] <span style=color:#f92672>%</span> n
+</span></span><span style=display:flex><span>            x <span style=color:#f92672>=</span> ((r0[i] <span style=color:#f92672>&gt;&gt;</span> s) <span style=color:#f92672>|</span> (r0[i] <span style=color:#f92672>&lt;&lt;</span> (n <span style=color:#f92672>-</span> s)))
+</span></span><span style=display:flex><span>            w0[i] <span style=color:#f92672>=</span> x <span style=color:#f92672>&amp;</span> mask
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>elif</span> op <span style=color:#f92672>==</span> <span style=color:#ae81ff>4</span>: <span style=color:#75715e># SHUF</span>
+</span></span><span style=display:flex><span>            w0[i] <span style=color:#f92672>=</span> r0[w1[i]]
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> w0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># Reading the s-boxes directly from `spirv-dis` output</span>
+</span></span><span style=display:flex><span>sboxes <span style=color:#f92672>=</span> []
+</span></span><span style=display:flex><span><span style=color:#66d9ef>with</span> open(<span style=color:#e6db74>&#34;prog2.asm&#34;</span>) <span style=color:#66d9ef>as</span> f:
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> line <span style=color:#f92672>in</span> f<span style=color:#f92672>.</span>readlines():
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> <span style=color:#e6db74>&#34;OpConstantComposite %_arr_uchar_ulong_256&#34;</span> <span style=color:#f92672>not</span> <span style=color:#f92672>in</span> line:
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>continue</span>
+</span></span><span style=display:flex><span>        xs <span style=color:#f92672>=</span> line<span style=color:#f92672>.</span>strip()<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34; &#34;</span>)[<span style=color:#ae81ff>4</span>:]
+</span></span><span style=display:flex><span>        sboxes<span style=color:#f92672>.</span>append(list(map(<span style=color:#66d9ef>lambda</span> x: int(x<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;_&#34;</span>)[<span style=color:#ae81ff>1</span>]), xs)))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>sboxes_inv <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> sbox <span style=color:#f92672>in</span> sboxes:
+</span></span><span style=display:flex><span>    sbox_inv <span style=color:#f92672>=</span> [<span style=color:#66d9ef>None</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>0x100</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x100</span>):
+</span></span><span style=display:flex><span>        sbox_inv[i] <span style=color:#f92672>=</span> sbox<span style=color:#f92672>.</span>index(i)
+</span></span><span style=display:flex><span>    sboxes_inv <span style=color:#f92672>+=</span> bytes(sbox_inv)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>inv_prog2</span>(r0, sbox_id):
+</span></span><span style=display:flex><span>    sbox_base <span style=color:#f92672>=</span> (sbox_id <span style=color:#f92672>%</span> <span style=color:#ae81ff>6</span>) <span style=color:#f92672>&lt;&lt;</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    w0 <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> len(r0)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(r0)):
+</span></span><span style=display:flex><span>        w0[i] <span style=color:#f92672>=</span> sboxes_inv[sbox_base <span style=color:#f92672>+</span> r0[i]]
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> w0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>inv_prog1</span>(r0, w1, width, height):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> len(r0) <span style=color:#f92672>==</span> width <span style=color:#f92672>*</span> height
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> GF256(np<span style=color:#f92672>.</span>matrix(r0)<span style=color:#f92672>.</span>reshape((width, height)))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>global</span> inv_matrix_cache
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> type(w1) <span style=color:#f92672>is</span> int <span style=color:#f92672>and</span> w1 <span style=color:#f92672>in</span> inv_matrix_cache:
+</span></span><span style=display:flex><span>        w1inv <span style=color:#f92672>=</span> inv_matrix_cache[w1]
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span>:
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>assert</span> len(w1) <span style=color:#f92672>==</span> width <span style=color:#f92672>*</span> height
+</span></span><span style=display:flex><span>        w1 <span style=color:#f92672>=</span> GF256(np<span style=color:#f92672>.</span>matrix(w1)<span style=color:#f92672>.</span>reshape((width, height)))
+</span></span><span style=display:flex><span>        print(<span style=color:#e6db74>&#34;w1inv...&#34;</span>)
+</span></span><span style=display:flex><span>        w1inv <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>linalg<span style=color:#f92672>.</span>inv(w1)
+</span></span><span style=display:flex><span>    r0mask <span style=color:#f92672>=</span> GF256(np<span style=color:#f92672>.</span>matrix([[(x<span style=color:#f92672>+</span>y)<span style=color:#f92672>&amp;</span><span style=color:#ae81ff>0xff</span> <span style=color:#66d9ef>for</span> x <span style=color:#f92672>in</span> range(width)] <span style=color:#66d9ef>for</span> y <span style=color:#f92672>in</span> range(height)]))
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;w0...&#34;</span>)
+</span></span><span style=display:flex><span>    w0 <span style=color:#f92672>=</span> (r0 <span style=color:#f92672>-</span> r0mask) <span style=color:#f92672>@</span> w1inv
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> w0<span style=color:#f92672>.</span>flatten()<span style=color:#f92672>.</span>tolist()
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># There is probably a smarter way to do the inverse of a power in a GF but I have no idea how</span>
+</span></span><span style=display:flex><span><span style=color:#75715e># This is efficient enough for this situation</span>
+</span></span><span style=display:flex><span>inv_pow_sboxes <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#34;&#34;</span>
+</span></span><span style=display:flex><span>allowed_pow <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\x01\x02\x04\x07\x08\x0b\x0d\x0e\x10\x13\x16\x17\x1a\x1c\x1d\x1f</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\x20\x25\x26\x29\x2b\x2c\x2e\x2f\x31\x34\x35\x38\x3a\x3b\x3d\x3e</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\x40\x43\x47\x49\x4a\x4c\x4d\x4f\x52\x53\x56\x58\x59\x5b\x5c\x5e</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\x61\x62\x65\x67\x68\x6a\x6b\x6d\x70\x71\x74\x76\x79\x7a\x7c\x7f</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\x80\x83\x85\x86\x89\x8b\x8e\x8f\x92\x94\x95\x97\x98\x9a\x9d\x9e</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\xa1\xa3\xa4\xa6\xa7\xa9\xac\xad\xb0\xb2\xb3\xb5\xb6\xb8\xbc\xbf</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\xc1\xc2\xc4\xc5\xc7\xca\xcb\xce\xd0\xd1\xd3\xd4\xd6\xd9\xda\xdf</span><span style=color:#e6db74>&#39;</span> <span style=color:#f92672>+</span> \
+</span></span><span style=display:flex><span>              <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\xe0\xe2\xe3\xe5\xe8\xe9\xec\xef\xf1\xf2\xf4\xf7\xf8\xfb\xfd\xfe</span><span style=color:#e6db74>&#39;</span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> p <span style=color:#f92672>in</span> allowed_pow:
+</span></span><span style=display:flex><span>    box <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> <span style=color:#ae81ff>256</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> x <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>256</span>):
+</span></span><span style=display:flex><span>        y <span style=color:#f92672>=</span> GF256(x) <span style=color:#f92672>**</span> p
+</span></span><span style=display:flex><span>        box[y] <span style=color:#f92672>=</span> x
+</span></span><span style=display:flex><span>    inv_pow_sboxes <span style=color:#f92672>+=</span> bytes(box)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>inv_prog1_pow</span>(r0, p):
+</span></span><span style=display:flex><span>    w0 <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> len(r0)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(r0)):
+</span></span><span style=display:flex><span>        x <span style=color:#f92672>=</span> r0[(i <span style=color:#f92672>-</span> p) <span style=color:#f92672>%</span> len(r0)]
+</span></span><span style=display:flex><span>        w0[i] <span style=color:#f92672>=</span> inv_pow_sboxes[(p<span style=color:#f92672>&amp;</span><span style=color:#ae81ff>0x7f</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>0x100</span> <span style=color:#f92672>+</span> (x <span style=color:#f92672>^</span> <span style=color:#ae81ff>0xab</span>)]
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> w0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># A bunch of utility functions used to easily convert u8 matricies to u32 and u16 ones</span>
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>as_u16</span>(xs):
+</span></span><span style=display:flex><span>    r <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> (len(xs)<span style=color:#f92672>&gt;&gt;</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(xs)<span style=color:#f92672>&gt;&gt;</span><span style=color:#ae81ff>1</span>):
+</span></span><span style=display:flex><span>        r[i] <span style=color:#f92672>=</span> xs[i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>1</span>] <span style=color:#f92672>|</span> (xs[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>1</span>) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>]<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>8</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>as_u32</span>(xs):
+</span></span><span style=display:flex><span>    r <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> (len(xs)<span style=color:#f92672>&gt;&gt;</span><span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(xs)<span style=color:#f92672>&gt;&gt;</span><span style=color:#ae81ff>2</span>):
+</span></span><span style=display:flex><span>        r[i] <span style=color:#f92672>=</span> xs[i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>] <span style=color:#f92672>|</span> (xs[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>) <span style=color:#f92672>+</span> <span style=color:#ae81ff>1</span>]<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>8</span>) <span style=color:#f92672>|</span> (xs[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>) <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>]<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>16</span>) <span style=color:#f92672>|</span> (xs[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>) <span style=color:#f92672>+</span> <span style=color:#ae81ff>3</span>]<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>24</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>u16_to_u8</span>(xs):
+</span></span><span style=display:flex><span>    r <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> (len(xs)<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>1</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(xs)):
+</span></span><span style=display:flex><span>        r[i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> xs[i] <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>
+</span></span><span style=display:flex><span>        r[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> xs[i] <span style=color:#f92672>&gt;&gt;</span> <span style=color:#ae81ff>8</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>u32_to_u8</span>(xs):
+</span></span><span style=display:flex><span>    r <span style=color:#f92672>=</span> [<span style=color:#ae81ff>0</span>] <span style=color:#f92672>*</span> (len(xs)<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(xs)):
+</span></span><span style=display:flex><span>        r[i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>] <span style=color:#f92672>=</span> xs[i] <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>
+</span></span><span style=display:flex><span>        r[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>)<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>] <span style=color:#f92672>=</span> (xs[i] <span style=color:#f92672>&gt;&gt;</span> <span style=color:#ae81ff>8</span>) <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>
+</span></span><span style=display:flex><span>        r[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>)<span style=color:#f92672>+</span><span style=color:#ae81ff>2</span>] <span style=color:#f92672>=</span> (xs[i] <span style=color:#f92672>&gt;&gt;</span> <span style=color:#ae81ff>16</span>) <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>
+</span></span><span style=display:flex><span>        r[(i<span style=color:#f92672>&lt;&lt;</span><span style=color:#ae81ff>2</span>)<span style=color:#f92672>+</span><span style=color:#ae81ff>3</span>] <span style=color:#f92672>=</span> xs[i] <span style=color:#f92672>&gt;&gt;</span> <span style=color:#ae81ff>24</span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># We precalculate the inverse matricies we will use multiple times</span>
+</span></span><span style=display:flex><span>inv_matrix_cache <span style=color:#f92672>=</span> {}
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x10</span>):
+</span></span><span style=display:flex><span>    w1 <span style=color:#f92672>=</span> sha256_tri_matrix(i, <span style=color:#ae81ff>0x100</span>)
+</span></span><span style=display:flex><span>    w1 <span style=color:#f92672>=</span> GF256(np<span style=color:#f92672>.</span>matrix(w1)<span style=color:#f92672>.</span>reshape((<span style=color:#ae81ff>0x100</span>, <span style=color:#ae81ff>0x100</span>)))
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;w1inv&#34;</span>, i)
+</span></span><span style=display:flex><span>    w1inv <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>linalg<span style=color:#f92672>.</span>inv(w1)
+</span></span><span style=display:flex><span>    inv_matrix_cache[i] <span style=color:#f92672>=</span> w1inv
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>w1 <span style=color:#f92672>=</span> sha256_tri_matrix(<span style=color:#ae81ff>0x59</span>, <span style=color:#ae81ff>0x400</span>)
+</span></span><span style=display:flex><span>w1 <span style=color:#f92672>=</span> GF256(np<span style=color:#f92672>.</span>matrix(w1)<span style=color:#f92672>.</span>reshape((<span style=color:#ae81ff>0x400</span>, <span style=color:#ae81ff>0x400</span>)))
+</span></span><span style=display:flex><span>print(<span style=color:#e6db74>&#34;w1inv 0x59&#34;</span>)
+</span></span><span style=display:flex><span>w1inv <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>linalg<span style=color:#f92672>.</span>inv(w1)
+</span></span><span style=display:flex><span>inv_matrix_cache[<span style=color:#ae81ff>0x1059</span>] <span style=color:#f92672>=</span> w1inv
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>w1 <span style=color:#f92672>=</span> sha256_tri_matrix(<span style=color:#ae81ff>0xb</span>, <span style=color:#ae81ff>0x400</span>)
+</span></span><span style=display:flex><span>w1 <span style=color:#f92672>=</span> GF256(np<span style=color:#f92672>.</span>matrix(w1)<span style=color:#f92672>.</span>reshape((<span style=color:#ae81ff>0x400</span>, <span style=color:#ae81ff>0x400</span>)))
+</span></span><span style=display:flex><span>print(<span style=color:#e6db74>&#34;w1inv 0xb&#34;</span>)
+</span></span><span style=display:flex><span>w1inv <span style=color:#f92672>=</span> np<span style=color:#f92672>.</span>linalg<span style=color:#f92672>.</span>inv(w1)
+</span></span><span style=display:flex><span>inv_matrix_cache[<span style=color:#ae81ff>0x100b</span>] <span style=color:#f92672>=</span> w1inv
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>prog_r</span>(r0, seed):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> len(r0) <span style=color:#f92672>==</span> <span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> u16_to_u8(inv_prog3(as_u16(r0), sha256_stream(<span style=color:#ae81ff>0x11</span>, <span style=color:#ae81ff>0x80000</span>, <span style=color:#ae81ff>0xffff</span>), <span style=color:#ae81ff>3</span>, <span style=color:#ae81ff>16</span>))
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog1(r0, sha256_tri_matrix(seed, <span style=color:#ae81ff>0x400</span>), <span style=color:#ae81ff>0x400</span>, <span style=color:#ae81ff>0x400</span>)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog2(r0, <span style=color:#ae81ff>0x1337</span>)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> u32_to_u8(inv_prog3(as_u32(r0), sha256_matrix(seed <span style=color:#f92672>*</span> <span style=color:#ae81ff>10</span>, <span style=color:#ae81ff>0x40000</span>), <span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>32</span>))
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog1(r0, <span style=color:#ae81ff>0x100b</span>, <span style=color:#ae81ff>0x400</span>, <span style=color:#ae81ff>0x400</span>)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>prog_g_p1</span>(r0):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> len(r0) <span style=color:#f92672>==</span> <span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog1(r0, <span style=color:#ae81ff>0x1059</span>, <span style=color:#ae81ff>0x400</span>, <span style=color:#ae81ff>0x400</span>)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    m3 <span style=color:#f92672>=</span> sha256_matrix(<span style=color:#ae81ff>0x40</span>, <span style=color:#ae81ff>0x80</span>)
+</span></span><span style=display:flex><span>    r0_next <span style=color:#f92672>=</span> []
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(r0)<span style=color:#f92672>//</span><span style=color:#ae81ff>0x80</span>):
+</span></span><span style=display:flex><span>        r0_next <span style=color:#f92672>+=</span> inv_prog3(r0[i<span style=color:#f92672>*</span><span style=color:#ae81ff>0x80</span>:(i<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>0x80</span>], m3, <span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>8</span>)
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> r0_next
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    m3 <span style=color:#f92672>=</span> sha256_matrix(<span style=color:#ae81ff>0x82</span>, <span style=color:#ae81ff>0x8000</span>)
+</span></span><span style=display:flex><span>    r0_next <span style=color:#f92672>=</span> []
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(len(r0)<span style=color:#f92672>//</span><span style=color:#ae81ff>0x10000</span>):
+</span></span><span style=display:flex><span>        r0_next <span style=color:#f92672>+=</span> u16_to_u8(inv_prog3(as_u16(r0[i<span style=color:#f92672>*</span><span style=color:#ae81ff>0x10000</span>:(i<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>0x10000</span>]), m3, <span style=color:#ae81ff>4</span>, <span style=color:#ae81ff>16</span>))
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> r0_next
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> u32_to_u8(inv_prog3(as_u32(r0), sha256_stream(<span style=color:#ae81ff>0x67</span>, <span style=color:#ae81ff>0x40000</span>, <span style=color:#ae81ff>0xffffffff</span>), <span style=color:#ae81ff>3</span>, <span style=color:#ae81ff>32</span>))
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>prog_g_p2</span>(r0, seed):
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog1_pow(r0, seed <span style=color:#f92672>*</span> <span style=color:#ae81ff>2</span>)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog1_pow(r0, seed)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> inv_prog1_pow(r0, <span style=color:#ae81ff>0</span>)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>prog_b_p1</span>(r0):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>assert</span> len(r0) <span style=color:#f92672>==</span> <span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> u16_to_u8(inv_prog3(as_u16(r0), sha256_stream(<span style=color:#ae81ff>0xbb</span>, <span style=color:#ae81ff>0x80000</span>, <span style=color:#ae81ff>0xffff</span>), <span style=color:#ae81ff>2</span>, <span style=color:#ae81ff>16</span>))
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    r0a <span style=color:#f92672>=</span> inv_prog3(r0[:<span style=color:#ae81ff>0x80000</span>], sha256_stream(<span style=color:#ae81ff>0x12</span>, <span style=color:#ae81ff>0x80000</span>, <span style=color:#ae81ff>0xff</span>), <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>8</span>)
+</span></span><span style=display:flex><span>    r0b <span style=color:#f92672>=</span> u32_to_u8(inv_prog3(as_u32(r0[<span style=color:#ae81ff>0x80000</span>:]), sha256_stream(<span style=color:#ae81ff>0xaa</span>, <span style=color:#ae81ff>0x20000</span>, <span style=color:#ae81ff>0xffffffff</span>), <span style=color:#ae81ff>1</span>, <span style=color:#ae81ff>32</span>))
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> r0a <span style=color:#f92672>+</span> r0b
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    shuffle <span style=color:#f92672>=</span> <span style=color:#e6db74>b</span><span style=color:#e6db74>&#39;</span><span style=color:#ae81ff>\x0d\x02\x0c\x08\x06\x05\x01\x09\x04\x0f\x0a\x0b\x07\x00\x03\x0e</span><span style=color:#e6db74>&#39;</span>
+</span></span><span style=display:flex><span>    r0n <span style=color:#f92672>=</span> []
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x10</span>):
+</span></span><span style=display:flex><span>        idx <span style=color:#f92672>=</span> shuffle[i]
+</span></span><span style=display:flex><span>        xs <span style=color:#f92672>=</span> inv_prog1(r0[idx<span style=color:#f92672>*</span><span style=color:#ae81ff>0x100</span><span style=color:#f92672>*</span><span style=color:#ae81ff>0x100</span>:(idx<span style=color:#f92672>+</span><span style=color:#ae81ff>1</span>)<span style=color:#f92672>*</span><span style=color:#ae81ff>0x100</span><span style=color:#f92672>*</span><span style=color:#ae81ff>0x100</span>], i, <span style=color:#ae81ff>0x100</span>, <span style=color:#ae81ff>0x100</span>)
+</span></span><span style=display:flex><span>        print(bytes(xs[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>        r0n <span style=color:#f92672>+=</span> xs
+</span></span><span style=display:flex><span>    r0 <span style=color:#f92672>=</span> r0n
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#66d9ef>def</span> <span style=color:#a6e22e>prog_b_p2</span>(r0, seed):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x20</span>):
+</span></span><span style=display:flex><span>        r0 <span style=color:#f92672>=</span> inv_prog2(r0, (<span style=color:#ae81ff>0x1F</span> <span style=color:#f92672>-</span> i) <span style=color:#f92672>*</span> seed)
+</span></span><span style=display:flex><span>    print(bytes(r0[:<span style=color:#ae81ff>32</span>])<span style=color:#f92672>.</span>hex())
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> r0
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># We read the expected output</span>
+</span></span><span style=display:flex><span>rr0 <span style=color:#f92672>=</span> [<span style=color:#66d9ef>None</span>] <span style=color:#f92672>*</span> (<span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>)
+</span></span><span style=display:flex><span>gr0 <span style=color:#f92672>=</span> [<span style=color:#66d9ef>None</span>] <span style=color:#f92672>*</span> (<span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>)
+</span></span><span style=display:flex><span>br0 <span style=color:#f92672>=</span> [<span style=color:#66d9ef>None</span>] <span style=color:#f92672>*</span> (<span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>)
+</span></span><span style=display:flex><span><span style=color:#66d9ef>with</span> open(<span style=color:#e6db74>&#34;kraken&#34;</span>, <span style=color:#e6db74>&#34;rb&#34;</span>) <span style=color:#66d9ef>as</span> f:
+</span></span><span style=display:flex><span>    f<span style=color:#f92672>.</span>seek(<span style=color:#ae81ff>0xce68</span>)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> i <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>1024</span><span style=color:#f92672>*</span><span style=color:#ae81ff>1024</span>):
+</span></span><span style=display:flex><span>        rgb <span style=color:#f92672>=</span> f<span style=color:#f92672>.</span>read(<span style=color:#ae81ff>3</span>)
+</span></span><span style=display:flex><span>        rr0[i] <span style=color:#f92672>=</span> rgb[<span style=color:#ae81ff>0</span>]
+</span></span><span style=display:flex><span>        gr0[i] <span style=color:#f92672>=</span> rgb[<span style=color:#ae81ff>1</span>]
+</span></span><span style=display:flex><span>        br0[i] <span style=color:#f92672>=</span> rgb[<span style=color:#ae81ff>2</span>]
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e># Green and blue channels are splited in 2 &#34;parts&#34;</span>
+</span></span><span style=display:flex><span><span style=color:#75715e># The first one can be computed ahead of time as it doesn&#39;t require the correct seed</span>
+</span></span><span style=display:flex><span><span style=color:#75715e># The second one will be recalculated on each try of the bruteforce</span>
+</span></span><span style=display:flex><span>g_p1 <span style=color:#f92672>=</span> prog_g_p1(gr0)
+</span></span><span style=display:flex><span>b_p1 <span style=color:#f92672>=</span> prog_b_p1(br0)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>print(<span style=color:#e6db74>&#34;&#34;</span>)
+</span></span><span style=display:flex><span>print(<span style=color:#e6db74>&#34;PREPWORK DONE - BRUTEFORCING SEED&#34;</span>)
+</span></span><span style=display:flex><span><span style=color:#66d9ef>for</span> seed <span style=color:#f92672>in</span> range(<span style=color:#ae81ff>0x100</span>):
+</span></span><span style=display:flex><span>    print(<span style=color:#e6db74>&#34;&#34;</span>)
+</span></span><span style=display:flex><span>    g <span style=color:#f92672>=</span> prog_g_p2(g_p1, seed)
+</span></span><span style=display:flex><span>    b <span style=color:#f92672>=</span> prog_b_p2(b_p1, seed)
+</span></span><span style=display:flex><span>    r <span style=color:#f92672>=</span> prog_r(rr0, seed)
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    print(seed)
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> r[<span style=color:#ae81ff>0</span>] <span style=color:#f92672>^</span> g[<span style=color:#ae81ff>100</span>] <span style=color:#f92672>^</span> b[<span style=color:#ae81ff>200</span>] <span style=color:#f92672>==</span> seed:
+</span></span><span style=display:flex><span>        print(<span style=color:#e6db74>&#34;GOOD SEED FOUND&#34;</span>)
+</span></span><span style=display:flex><span>        open(<span style=color:#e6db74>&#34;r.bin&#34;</span>, <span style=color:#e6db74>&#34;wb&#34;</span>)<span style=color:#f92672>.</span>write(bytes(r))
+</span></span><span style=display:flex><span>        open(<span style=color:#e6db74>&#34;g.bin&#34;</span>, <span style=color:#e6db74>&#34;wb&#34;</span>)<span style=color:#f92672>.</span>write(bytes(g))
+</span></span><span style=display:flex><span>        open(<span style=color:#e6db74>&#34;b.bin&#34;</span>, <span style=color:#e6db74>&#34;wb&#34;</span>)<span style=color:#f92672>.</span>write(bytes(b))
+</span></span><span style=display:flex><span>        sys<span style=color:#f92672>.</span>exit(<span style=color:#ae81ff>0</span>)
+</span></span></code></pre></div><p>As it is single-threaded, I took my usual &ldquo;lazy multi-threading&rdquo; approch by launching two of them, one on the range [0;127] and the
+other on [128;255].</p><p>After 45 minutes they both finish, and this is when you notice that you forgot the catch in <code>c</code> that was offseting the results by <code>p</code>. -_-</p><p>After noticing and fixing this issue we are able to find the correct seed <code>0x2c</code> and to reconstruct the input image:</p><img src=/img/20240414-FCSC-2024-Kraken/Kraken-002.png alt="Input image showing a kraken attacking a boat with the text 'The image should be &#34;clear&#34; and not fuzzy! Some more efforts maybe? ;-) Unleash the Kraken!'"><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ ./kraken input.ppm
+</span></span><span style=display:flex><span>[+] OK: loaded input.ppm
+</span></span><span style=display:flex><span>[+] OK! The flag is: FCSC{54fdbee77db853ec2fa844398a9fb460a8623d81cbef4056dbdd0b7bcf03ffbe}
+</span></span></code></pre></div><div class=footnotes role=doc-endnotes><hr><ol><li id=fn:1><p>There is probably a way to make it more granular by only allowing the required capabilities, but I was too lazy.&#160;<a href=#fnref:1 class=footnote-backref role=doc-backlink>&#8617;&#xfe0e;</a></p></li></ol></div></main><hr><footer>© 2020 - 2024 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
