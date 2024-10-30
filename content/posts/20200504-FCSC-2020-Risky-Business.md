@@ -12,18 +12,17 @@ tags:
 Le challenge est composé d'un simple binaire ELF RISC-V.
 ```
 $ file risky-business
-risky-business: ELF 64-bit LSB shared object, UCB RISC-V, version 1 (SYSV), dynamically linked, interpreter
-/lib/ld-linux-riscv64-lp64d.so.1, for GNU/Linux 4.15.0, BuildID[sha1]=..., not stripped
+risky-business: ELF 64-bit LSB shared object, UCB RISC-V, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-riscv64-lp64d.so.1, for GNU/Linux 4.15.0, BuildID[sha1]=..., not stripped
 ```
 Le but est d'exploiter ce binaire de manière à obtenir un shell sur la machine l'exécutant. On peut interagir avec lui via une simple connexion TCP que l'on peut établir avec `netcat`.
 ```
 nc challenges1.france-cybersecurity-challenge.fr 4004
 ```
-A première vue le binaire semble accepter des données via l'entrée standard avant de s'arrêter.
+À première vue le binaire semble accepter des données via l'entrée standard avant de s'arrêter.
 
-# II - Rétro ingénierie
+# II - Rétro-ingénierie
 
-Pour effectuer la rétro ingénierie de ce binaire, j'ai utilisé *Ghidra*. Sa dernière version (v9.1.2) ne supporte pas l'architecture RISC-V, j'ai donc dût compiler une version plus récente depuis les sources disponible sur la branche `master` du GitHub.
+Pour effectuer la rétro-ingénierie de ce binaire, j'ai utilisé *Ghidra*. Sa dernière version (v9.1.2) ne supporte pas l'architecture RISC-V, j'ai donc dû compiler une version plus récente depuis les sources disponibles sur la branche `master` du GitHub.
 
 La décompilation faite par Ghidra est plutôt précise, après avoir renommé les variables correctement nous obtenons la fonction `main()` suivante :
 ```c
@@ -78,7 +77,7 @@ On peut interpréter cela plus simplement : dans une représentation hexadécima
 
 # III - Écriture de la base du shellcode
 
-Cet article de blog décrit comment écrire un shellcode pour l'architecture RISC-V : [https://thomask.sdf.org/blog/2018/08/25/basic-shellcode-in-riscv-linux.html](https://thomask.sdf.org/blog/2018/08/25/basic-shellcode-in-riscv-linux.html). Le but est donc de charger les arguments d'un syscall dans les registres `a0` à `a6` et le numéro du syscall dans le registre `a7` avant d'utiliser l'instruction `ecall` pour l'effectuer. Le syscall à appeler est le traditionnel `execve` (syscall n° 221 sous Linux en RISC-V) nous permettant d'obtenir un shell en executant `/bin/sh`.
+Cet article de blog décrit comment écrire un shellcode pour l'architecture RISC-V : [https://thomask.sdf.org/blog/2018/08/25/basic-shellcode-in-riscv-linux.html](https://thomask.sdf.org/blog/2018/08/25/basic-shellcode-in-riscv-linux.html). Le but est donc de charger les arguments d'un syscall dans les registres `a0` à `a6` et le numéro du syscall dans le registre `a7` avant d'utiliser l'instruction `ecall` pour l'effectuer. Le syscall à appeler est le traditionnel `execve` (syscall n° 221 sous Linux en RISC-V) nous permettant d'obtenir un shell en exécutant `/bin/sh`.
 
 ```asm
 addi	a0,s0,-96 + 20 # le shellcode est chargé sur la stack à s0-96 : s0-96+20 pointe donc sur le dword plus
@@ -113,17 +112,23 @@ ecall
 .word 0x6e69622f
 .word 0x978cd0d0
 ```
-Il est à noter que le shellcode est assemblé avec l'option `-march riscv64ic` permettant d'ajouter l'extension `C` du standard RISC-V, celle-ci permet d'avoir des instructions compressées de 2 octets au lieu de 4. Les instructions `lw` et `sw` du shellcode précédent ne font donc que 2 octets. Cette compression permet, en plus d'économiser de l'espace, de ne pas avoir d'octets nuls dans le shellcode.
+Il est à noter que le shellcode est assemblé avec l'option `-march riscv64ic` permettant d'ajouter l'extension `C` du standard RISC-V. Celle-ci permet d'avoir des instructions compressées de 2 octets au lieu de 4. Les instructions `lw` et `sw` du shellcode précédent ne font donc que 2 octets. Cette compression permet, en plus d'économiser de l'espace, de ne pas avoir d'octets nuls dans le shellcode.
 
-L'instruction m'ayant posé le plus de problème est `ecall`. Celle-ci est indispensable pour pouvoir effectuer le syscall mais n'existe que sous une seule forme : `0x00000073`, elle contient donc 2 suites de demi octets interdites, 0x00 et 0x73. J'ai d'abord voulu essayer de mettre en place du *self-modifying code* en `NOT`ant l'instruction et en la réparant avant de l'exécuter. Cependant l'émulateur RISC-V de Qemu n'est pas encore au point et comme celui-ci *"traduis"* les instructions RISC-V en instructions x86, la traduction n'est pas re-effectuée après que l'instruction soit restaurée provoquant un crash du programme.
+L'instruction m'ayant posé le plus de problème est `ecall`. Celle-ci est indispensable pour pouvoir effectuer le syscall mais n'existe que sous une seule forme : `0x00000073`, elle contient donc 2 suites de demi octets interdites, 0x00 et 0x73. J'ai d'abord voulu essayer de mettre en place du *self-modifying code* en `NOT`ant l'instruction et en la réparant avant de l'exécuter. Cependant l'émulateur RISC-V de QEMU n'est pas encore au point et comme celui-ci *"traduit"* les instructions RISC-V en instructions x86, la traduction n'est pas re-effectuée après que l'instruction soit restaurée, provoquant un crash du programme.
+
+---
+
+**EDIT : 2024-10-14** : QEMU se comportait "normalement" en 2020, il faut utiliser l'instruction `FENCE.I` pour s'assurer que l'écriture de la nouvelle instruction se fait avant sa lecture.
+
+---
 
 # IV - `ret2libc` pour effectuer le syscall
 
-La solution opté pour effectuer le syscall est donc un `ret2libc`. Le but est de trouver une instruction `ecall` dans la libc et de `jmp` dessus. Comme le `Dockerfile` pour déployer le challenge est fournis, nous pouvons avoir exactement la même libc que celle du serveur où s'exécutera le shellcode final.
+La solution que j'ai choisie pour effectuer le syscall est donc un `ret2libc`. Le but est de trouver une instruction `ecall` dans la libc et de `jmp` dessus. Comme le `Dockerfile` pour déployer le challenge est fourni, nous pouvons utiliser exactement la même libc que celle du serveur où s'exécutera le shellcode final.
 
-Bien que l'ASLR soit activée, Qemu ne semble pas en avoir une très bonne (ou pas du tout) en effet après de multiple tests il semble que l'adresse de base de la libc soit toujours la même : `0x4000827000`. Pour trouver cette adresse de base, il suffit de debugger le programme avec `gdb` et de lire l'adresse de `scanf` puis de la soustraire avec son adresse dans `libc.so`. Nous n'avons qu'a `grep`er la sortie de `objdump -D` sur la libc pour trouver un `ecall`.
+Bien que l'ASLR soit activée, QEMU ne semble pas en avoir une très bonne (ou pas du tout), en effet après de multiples tests il semble que l'adresse de base de la libc soit toujours la même : `0x4000827000`. Pour trouver cette adresse de base, il suffit de déboguer le programme avec `gdb` et de lire l'adresse de `scanf` puis de la soustraire avec son adresse dans `libc.so`. Nous n'avons qu'à `grep`er la sortie de `objdump -D` sur la libc pour trouver un `ecall`.
 
-Le `ecall` choisi est à l'adresse 0xb68 de la libc et peut donc être trouvé à l'adresse `0x4000827b68` dans l'espace d'adresse de notre binaire. Comme l'adresse contient beaucoup de suite de demi octets interdites, celle-ci est `NOT`ée avant d'être utilisée.
+Le `ecall` choisi est à l'adresse `0xb68` de la libc et peut donc être trouvé à l'adresse `0x4000827b68` dans l'espace d'adresse de notre binaire. Comme l'adresse contient beaucoup de suite de demi octets interdites, celle-ci est `NOT`ée avant d'être utilisée.
 
 Voici donc le shellcode final :
 ```asm
@@ -148,11 +153,11 @@ jr   -4(a4)
 .word 0x978cd0d0
 ```
 
-Comme l'instruction `jr` nécessite un offset par rapport à l'adresse contenue dans le registre, celui-ci ne pouvait donc pas être 0 sous peine de comporter beaucoup de suites de demi octets interdites. Le sot se fait donc avec un offset de -4 et l'adresse à été adaptée en conséquence.
+Comme l'instruction `jr` nécessite un offset par rapport à l'adresse contenue dans le registre, celui-ci ne pouvait donc pas être 0 sous peine de comporter beaucoup de suites de demi octets interdites. Le saut se fait donc avec un offset de -4 et l'adresse a été adaptée en conséquence.
 
 # V - Exploitation finale
 
-Après avoir assemblé le shellcode et l'avoir testé en local, on peut l'exécuter sur le serveur.
+Après avoir assemblé le shellcode et l'avoir testé en local, nous pouvons l'exécuter sur le serveur.
 ```sh
 $ cat shellcode.bin - | nc -v challenges1.france-cybersecurity-challenge.fr 4004
 Warning: inverse host lookup failed for 51.68.117.85: Unknown host

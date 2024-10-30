@@ -9,7 +9,7 @@ tags:
 ---
 
 # I - Intro
-Le challenge se compose d'un interpréteur Python 3.8.2 avec le quel on peut interagir via une simple connexion TCP obtenable avec `netcat`. Cet interpréteur modifié va lever une exception lorsque certaine actions sont effectuée. Il est donc impossible d'appeler `os.system` pour obtenir un shell mais aussi d'ouvrir un fichier avec `open()`. Le but est donc d'appeler la fonction `print_flag()` qui à été ajoutée à la librairie principale de python que l'ont peut accéder via le module `ctypes`, celle-ci va aussi lever une exception.
+Le challenge se compose d'un interpréteur Python 3.8.2 avec lequel nous pouvons interagir via une simple connexion TCP obtenable avec `netcat`. Cet interpréteur modifié va lever une exception lorsque certaine actions sont effectuées. Il est donc impossible d'appeler `os.system` pour obtenir un shell ou d'ouvrir un fichier avec `open()`. Le but est donc d'appeler la fonction `print_flag()` qui a été ajoutée à la librairie principale de Python, qui peut être accédée via le module `ctypes`. Cependant celle-ci va aussi lever une exception.
 ```
 $ nc challenges1.france-cybersecurity-challenge.fr 4005
 Arriverez-vous à appeler la fonction print_flag ?
@@ -39,32 +39,32 @@ Exception: Action interdite
 ```
 
 # II - Les audit hooks
-Les exceptions n'apparaissent pas toutes de la même manière mais celle de `import os` indique `Exception ignored in audit hook`. L'exception est donc générée dans un audit hook. Les audit hooks sont une nouvelle fonctionnalité de python 3.8 permettant d'exécuter une certaine fonction avant que certain évènements se produisent (Ex: import d'un module, appel d'une fonction, etc.). Ceux-ci sont définis dans le standard [PEP 578](https://www.python.org/dev/peps/pep-0578/).
+Les exceptions n'apparaissent pas toutes de la même manière mais celle de `import os` indique `Exception ignored in audit hook`. L'exception est donc générée dans un audit hook. Les audit hooks sont une nouvelle fonctionnalité de Python 3.8 permettant d'exécuter une certaine fonction avant que certain évènements se produisent (Par exemple : import d'un module, appel d'une fonction, etc.). Ceux-ci sont définis dans le standard [PEP 578](https://www.python.org/dev/peps/pep-0578/).
 
-Pour créer un audit hook, la fonction `PySys_AddAuditHook()` doit être appelée, celle-ci va ajouter le pointeur de fonction passé en paramètre dans une liste chainée commençant par le [membre `audit_hook_head` de la structure `_PyRuntimeState`](https://github.com/python/cpython/blob/62f75fe3dd138f72303814d27183aa469eefcca6/Include/internal/pycore_runtime.h#L105). Cette structure est utilisée par l'objet global principal de l'interpréteur Python: [`_PyRuntime`](https://github.com/python/cpython/blob/252346acd937ddba4845331994b8ff4f90349625/Python/pylifecycle.c#L66).
+Pour créer un audit hook, la fonction `PySys_AddAuditHook()` doit être appelée, celle-ci va ajouter le pointeur de fonction passé en paramètre dans une liste chaînée commençant par le [membre `audit_hook_head` de la structure `_PyRuntimeState`](https://github.com/python/cpython/blob/62f75fe3dd138f72303814d27183aa469eefcca6/Include/internal/pycore_runtime.h#L105). Cette structure est utilisée par l'objet global principal de l'interpréteur Python : [`_PyRuntime`](https://github.com/python/cpython/blob/252346acd937ddba4845331994b8ff4f90349625/Python/pylifecycle.c#L66).
 
-Le but serait donc de mettre le pointeur `_PyRuntime.audit_hook_head` à `NULL` de manière à *"détruire"* le liste chainée et rendre inefficace tous les audit hooks. Pour cela il faut connaitre l'offset du membre `audit_hook_head` par rapport à `_PyRuntime`. La manière la plus simple pour le connaitre est de compiler exactement la même version de python que celle du serveur avec le `CFLAGS` `-g` de manière à produire un binaire contenant les informations `DWARF`. On peut ensuite ouvrir cet interpréteur et y attacher un debuggeur pour connaitre l'offset voulu.
+Le but serait donc de mettre le pointeur `_PyRuntime.audit_hook_head` à `NULL` de manière à *"détruire"* la liste chaînée et rendre inefficace tous les audit hooks. Pour cela il faut connaître l'offset du membre `audit_hook_head` par rapport à `_PyRuntime`. La manière la plus simple pour le retrouver est de compiler exactement la même version de Python que celle du serveur avec le `CFLAGS` `-g` de manière à produire un binaire contenant les informations `DWARF`. Nous pouvons ensuite ouvrir cet interpréteur et y attacher un débugueur pour connaître l'offset voulu.
 
 ```
 (gdb) print &(_PyRuntime.audit_hook_head)
 $1 = (_Py_AuditHookEntry **) 0x788e70 <_PyRuntime+1456>
 ```
 
-Donc : `&_PyRuntime + 1456 == &(_PyRuntime.audit_hook_head)`.
+Donc `&_PyRuntime + 1456 == &(_PyRuntime.audit_hook_head)`.
 
 # III - `ctypes`
 
-`ctypes` est le module python permettant d'utiliser des bibliothèques natives, celui-ci n'a pas été entièrement blacklisté par le audit hook, on peut donc se servir de certaine de ces fonctions permettant des actions plutôt utiles.
+`ctypes` est le module Python permettant d'utiliser des bibliothèques natives, celui-ci n'a pas été entièrement blacklisté par l'audit hook, nous pouvons donc nous servir de certaines de ses fonctions permettant des actions plutôt utiles.
 
-`ctypes._CData.from_address()` : `ctypes` possède des classes, toutes héritantes de `_CData`, représentant différent types de données en C. On peut donc par exemple utiliser `ctypes.c_uint64.from_address(0x12345678)` pour lire un entier non signé de 64 bits à l'adresse `0x12345678`. Cette fonction permet donc d'effectuer des *arbitrary write* dans l'espace d'adresse de python.
+`ctypes._CData.from_address()` : `ctypes` possède des classes, toutes héritantes de `_CData`, représentant différents types de données en C. On peut donc utiliser `ctypes.c_uint64.from_address(0x12345678)` pour lire un entier non signé de 64 bits à l'adresse `0x12345678`. Cette fonction permet donc d'effectuer des *arbitrary reads* dans l'espace d'adresse de python.
 
-`ctypes.memset()` : celle-ci à l'avantage d'être clair, il s'agit de la fonction analogue de `memset()` en C, on peut donc s'en servir pour effectuer des *arbitrary writes* dans l'espace d'adresse de python.
+`ctypes.memset()` : celle-ci est plutôt claire, il s'agit de la fonction analogue à `memset(3)` en C, on peut donc s'en servir pour effectuer des *arbitrary writes* dans l'espace d'adresse de python.
 
-`ctypes.addressof()` : Cette fonction retourne l'adresse d'un objet python, on peut donc s'en servir pour obtenir l'adresse de `_PyRuntime`. Il est à noter que celle-ci revoit bien l'adresse de l'objet python or `ctypes.pythonapi._PyRuntime` retournera un `_FuncPtr` permettant d'encapsuler la fonction C (bon ici ce n'est pas une fonction mais le principe reste le même), il faudra donc utiliser `ctypes.c_uint64.from_address(ctypes.addressof(ctypes.pythonapi._PyRuntime))` pour lire le premier membre du `_FuncPtr` qui correspond à la vrai adresse de `_PyRuntime`.
+`ctypes.addressof()` : Cette fonction retourne l'adresse d'un objet python, on peut donc s'en servir pour obtenir l'adresse de `_PyRuntime`. Il faut bien noter que celle-ci revoit l'adresse de l'objet Python, or `ctypes.pythonapi._PyRuntime` retournera un `_FuncPtr` permettant d'encapsuler la fonction C (bon ici ce n'est pas une fonction mais le principe reste le même), il faudra donc utiliser `ctypes.c_uint64.from_address(ctypes.addressof(ctypes.pythonapi._PyRuntime))` pour lire le premier membre du `_FuncPtr` qui correspond à la vraie adresse de `_PyRuntime`.
 
 # IV - Exploitation finale
 
-A l'aide des informations des paragraphes II et III, on peut facilement déactiver les audit hooks et donc permettre l'appel de `print_flag()` :
+À l'aide des informations des paragraphes II et III, nous pouvons facilement désactiver les audit hooks et donc permettre l'appel de `print_flag()` :
 ```
 Arriverez-vous à appeler la fonction print_flag ?
 Python 3.8.2 (default, Apr  1 2020, 15:52:55) 

