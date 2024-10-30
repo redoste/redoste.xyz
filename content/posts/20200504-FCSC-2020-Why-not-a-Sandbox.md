@@ -39,7 +39,7 @@ Exception: Action interdite
 ```
 
 # II - Les audit hooks
-Les exceptions n'apparaissent pas toutes de la même manière mais celle de `import os` indique `Exception ignored in audit hook`. L'exception est donc générée dans un audit hook. Les audit hooks sont une nouvelle fonctionnalité de Python 3.8 permettant d'exécuter une certaine fonction avant que certain évènements se produisent (Par exemple : import d'un module, appel d'une fonction, etc.). Ceux-ci sont définis dans le standard [PEP 578](https://www.python.org/dev/peps/pep-0578/).
+Les exceptions n'apparaissent pas toutes de la même manière mais celle de `import os` indique `Exception ignored in audit hook`. L'exception est donc générée dans un audit hook. Les audit hooks sont une nouvelle fonctionnalité de Python 3.8 permettant d'exécuter une certaine fonction avant que certains évènements se produisent (Par exemple : import d'un module, appel d'une fonction, etc.). Ceux-ci sont définis dans le standard [PEP 578](https://www.python.org/dev/peps/pep-0578/).
 
 Pour créer un audit hook, la fonction `PySys_AddAuditHook()` doit être appelée, celle-ci va ajouter le pointeur de fonction passé en paramètre dans une liste chaînée commençant par le [membre `audit_hook_head` de la structure `_PyRuntimeState`](https://github.com/python/cpython/blob/62f75fe3dd138f72303814d27183aa469eefcca6/Include/internal/pycore_runtime.h#L105). Cette structure est utilisée par l'objet global principal de l'interpréteur Python : [`_PyRuntime`](https://github.com/python/cpython/blob/252346acd937ddba4845331994b8ff4f90349625/Python/pylifecycle.c#L66).
 

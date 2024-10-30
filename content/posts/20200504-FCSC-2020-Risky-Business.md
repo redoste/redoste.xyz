@@ -128,7 +128,7 @@ La solution que j'ai choisie pour effectuer le syscall est donc un `ret2libc`. L
 
 Bien que l'ASLR soit activée, QEMU ne semble pas en avoir une très bonne (ou pas du tout), en effet après de multiples tests il semble que l'adresse de base de la libc soit toujours la même : `0x4000827000`. Pour trouver cette adresse de base, il suffit de déboguer le programme avec `gdb` et de lire l'adresse de `scanf` puis de la soustraire avec son adresse dans `libc.so`. Nous n'avons qu'à `grep`er la sortie de `objdump -D` sur la libc pour trouver un `ecall`.
 
-Le `ecall` choisi est à l'adresse `0xb68` de la libc et peut donc être trouvé à l'adresse `0x4000827b68` dans l'espace d'adresse de notre binaire. Comme l'adresse contient beaucoup de suite de demi octets interdites, celle-ci est `NOT`ée avant d'être utilisée.
+Le `ecall` choisi est à l'adresse `0xb68` de la libc et peut donc être trouvé à l'adresse `0x4000827b68` dans l'espace d'adresse de notre binaire. Comme l'adresse contient beaucoup de suites de demi octets interdites, celle-ci est `NOT`ée avant d'être utilisée.
 
 Voici donc le shellcode final :
 ```asm
