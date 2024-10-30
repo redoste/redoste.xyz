@@ -1,4 +1,5 @@
-<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2024 : Kraken - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2024 : Kraken</h2><span class=date>2024-04-14 22:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2024/>FCSC 2024</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>Kraken</em> looks like a fairly complex reversing challenge. We are given a few more files at the start in addition
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2024 : Kraken - redoste</title>
+<link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2024 : Kraken</h2><span class=date>2024-04-14 22:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2024/>FCSC 2024</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>Kraken</em> looks like a fairly complex reversing challenge. We are given a few more files at the start in addition
 to the binary, the most important one being a <code>Dockerfile</code> that sets up a specific environement required to run
 the program easily.</p><p>A quick look at this <code>Dockerfile</code> will tease us about what we are about to endure:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-dockerfile data-lang=dockerfile><span style=display:flex><span><span style=color:#66d9ef>FROM</span><span style=color:#e6db74> debian:bookworm-slim</span><span style=color:#960050;background-color:#1e0010>
 </span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span><span style=color:#66d9ef>WORKDIR</span><span style=color:#e6db74> /build</span><span style=color:#960050;background-color:#1e0010>
@@ -34,19 +35,19 @@ managed to get the parser to accept P6 files with a comment in the header:</p><p
 1024 1024
 255
 [pixels]
-</code></pre><p>A simple function then splits the channels in three different buffers and&mldr;</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>if</span> (split_channels(file <span style=color:#f92672>+</span> hdr_len, len, r, g, b) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</code></pre><p>A simple function then splits the channels in three different buffers and&mldr;</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>if</span> (<span style=color:#a6e22e>split_channels</span>(file <span style=color:#f92672>+</span> hdr_len, len, r, g, b) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>goto</span> out;
 </span></span><span style=display:flex><span>}
-</span></span><span style=display:flex><span>fprintf(stdout, <span style=color:#e6db74>&#34;[+] OK: loaded %s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, file_name);
-</span></span><span style=display:flex><span>free(file);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>fprintf</span>(stdout, <span style=color:#e6db74>&#34;[+] OK: loaded %s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, file_name);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>free</span>(file);
 </span></span><span style=display:flex><span><span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>sha256_init(state);
-</span></span><span style=display:flex><span>sha256_update(state, <span style=color:#e6db74>&#34;UNLEASH_THE_KRAKEN_&#34;</span>, <span style=color:#ae81ff>0x13</span>);
-</span></span><span style=display:flex><span>sha256_update(state, r, <span style=color:#ae81ff>0x100000</span>);
-</span></span><span style=display:flex><span>sha256_update(state, g, <span style=color:#ae81ff>0x100000</span>);
-</span></span><span style=display:flex><span>sha256_update(state, b, <span style=color:#ae81ff>0x100000</span>);
-</span></span><span style=display:flex><span>sha256_final(state, hash);
-</span></span><span style=display:flex><span>r <span style=color:#f92672>=</span> memcmp(hash, <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\x98\x58\xe1\x8b\x40\xae\x29\x0a\x05\x30\x86\xca\x3a\x39\xfd\x2f</span><span style=color:#e6db74>&#34;</span>
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#a6e22e>sha256_init</span>(state);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>sha256_update</span>(state, <span style=color:#e6db74>&#34;UNLEASH_THE_KRAKEN_&#34;</span>, <span style=color:#ae81ff>0x13</span>);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>sha256_update</span>(state, r, <span style=color:#ae81ff>0x100000</span>);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>sha256_update</span>(state, g, <span style=color:#ae81ff>0x100000</span>);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>sha256_update</span>(state, b, <span style=color:#ae81ff>0x100000</span>);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>sha256_final</span>(state, hash);
+</span></span><span style=display:flex><span>r <span style=color:#f92672>=</span> <span style=color:#a6e22e>memcmp</span>(hash, <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\x98\x58\xe1\x8b\x40\xae\x29\x0a\x05\x30\x86\xca\x3a\x39\xfd\x2f</span><span style=color:#e6db74>&#34;</span>
 </span></span><span style=display:flex><span>                 <span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\xfc\x9f\x31\x99\x4a\x37\xf7\x7d\x3c\xf6\x82\xb6\xaa\xeb\x58\x31</span><span style=color:#e6db74>&#34;</span>, <span style=color:#ae81ff>32</span>) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>;
 </span></span><span style=display:flex><span><span style=color:#75715e>// (the memcmp is unrolled but that&#39;s not the point)
 </span></span></span></code></pre></div><p>Yep sure, so the solution is obviously to crack the SHA256 hash on about 3MiB of data! :)</p><p>More seriously it&rsquo;s pretty surprising to see the challenge done this way: its fairly common in reversing challenges
@@ -59,7 +60,7 @@ let&rsquo;s just follow some intresting x-refs like the import <code>clCreatePro
 </span></span><span style=display:flex><span>    prg1[i] <span style=color:#f92672>=</span> KEYSTREAM[i <span style=color:#f92672>&amp;</span> <span style=color:#ae81ff>0xff</span>] <span style=color:#f92672>^</span> PROG_1[i];
 </span></span><span style=display:flex><span>    i <span style=color:#f92672>=</span> i <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>;
 </span></span><span style=display:flex><span>} <span style=color:#66d9ef>while</span> (i <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0x2780</span>);
-</span></span><span style=display:flex><span>PROG_1_ID <span style=color:#f92672>=</span> clCreateProgramWithIL(context, prg1, <span style=color:#ae81ff>0x2780</span>, <span style=color:#f92672>&amp;</span>err);
+</span></span><span style=display:flex><span>PROG_1_ID <span style=color:#f92672>=</span> <span style=color:#a6e22e>clCreateProgramWithIL</span>(context, prg1, <span style=color:#ae81ff>0x2780</span>, <span style=color:#f92672>&amp;</span>err);
 </span></span></code></pre></div><p>And this is repeated for 3 different programs, this is a simple XOR cipher that can be decrypted with a few lines
 of python:</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-python data-lang=python><span style=display:flex><span>f <span style=color:#f92672>=</span> open(<span style=color:#e6db74>&#34;kraken&#34;</span>, <span style=color:#e6db74>&#34;rb&#34;</span>)
 </span></span><span style=display:flex><span>f<span style=color:#f92672>.</span>seek(<span style=color:#ae81ff>0x6430</span>)
@@ -116,7 +117,7 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>short</span> word;
 </span></span><span style=display:flex><span><span style=color:#66d9ef>typedef</span> <span style=color:#66d9ef>struct</span> cl_program cl_program;
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>__attribute__((packed)) <span style=color:#66d9ef>struct</span> cl_program {
+</span></span><span style=display:flex><span><span style=color:#a6e22e>__attribute__</span>((packed)) <span style=color:#66d9ef>struct</span> cl_program {
 </span></span><span style=display:flex><span>    undefined8 context;
 </span></span><span style=display:flex><span>    undefined8 dev_id;
 </span></span><span style=display:flex><span>    undefined8 program;
@@ -134,7 +135,7 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span><span style=display:flex><span>    undefined4 _pad1;
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>void</span> <span style=color:#f92672>*</span>read_buf_ptr[<span style=color:#ae81ff>20</span>];
 </span></span><span style=display:flex><span>};
-</span></span><span style=display:flex><span>static_assert(<span style=color:#66d9ef>sizeof</span>(cl_program) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x308</span>);
+</span></span><span style=display:flex><span><span style=color:#a6e22e>static_assert</span>(<span style=color:#66d9ef>sizeof</span>(cl_program) <span style=color:#f92672>==</span> <span style=color:#ae81ff>0x308</span>);
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#75715e>#define run_cl_program_start_addr 0x555555555d80
 </span></span></span><span style=display:flex><span><span style=color:#75715e>#define run_cl_program_end_addr   0x555555556188
@@ -144,45 +145,45 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span><span style=display:flex><span><span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span> PROG_3 <span style=color:#f92672>=</span> (<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555863150</span>;
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>const</span> cl_program<span style=color:#f92672>*</span> cur_prg <span style=color:#f92672>=</span> NULL;
-</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> size_t cur_mul_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>static</span> <span style=color:#66d9ef>size_t</span> cur_mul_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>run_cl_program_trace</span>(<span style=color:#66d9ef>const</span> cl_program<span style=color:#f92672>*</span> prg) {
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>program <span style=color:#f92672>==</span> <span style=color:#f92672>*</span>PROG_1) {
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:1&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;prg:1&#34;</span>);
 </span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>program <span style=color:#f92672>==</span> <span style=color:#f92672>*</span>PROG_2) {
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:2&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;prg:2&#34;</span>);
 </span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>program <span style=color:#f92672>==</span> <span style=color:#f92672>*</span>PROG_3) {
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:3&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;prg:3&#34;</span>);
 </span></span><span style=display:flex><span>    } <span style=color:#66d9ef>else</span> {
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;prg:0x%zx&#34;</span>, prg<span style=color:#f92672>-&gt;</span>program);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;prg:0x%zx&#34;</span>, prg<span style=color:#f92672>-&gt;</span>program);
 </span></span><span style=display:flex><span>    }
-</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34; krnl=%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, prg<span style=color:#f92672>-&gt;</span>kernel_name);
-</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;%u dims &#34;</span>, prg<span style=color:#f92672>-&gt;</span>work_dim);
-</span></span><span style=display:flex><span>    size_t mul_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>work_dim; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34; krnl=%s</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, prg<span style=color:#f92672>-&gt;</span>kernel_name);
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;%u dims &#34;</span>, prg<span style=color:#f92672>-&gt;</span>work_dim);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>size_t</span> mul_size <span style=color:#f92672>=</span> <span style=color:#ae81ff>1</span>;
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>size_t</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>work_dim; i<span style=color:#f92672>++</span>) {
 </span></span><span style=display:flex><span>        mul_size <span style=color:#f92672>*=</span> prg<span style=color:#f92672>-&gt;</span>dims[i];
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;%u&#34;</span>, prg<span style=color:#f92672>-&gt;</span>dims[i]);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;%u&#34;</span>, prg<span style=color:#f92672>-&gt;</span>dims[i]);
 </span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>work_dim<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>) {
-</span></span><span style=display:flex><span>            putc(<span style=color:#e6db74>&#39; &#39;</span>, stdout);
+</span></span><span style=display:flex><span>            <span style=color:#a6e22e>putc</span>(<span style=color:#e6db74>&#39; &#39;</span>, stdout);
 </span></span><span style=display:flex><span>        }
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>    cur_mul_size <span style=color:#f92672>=</span> mul_size;
-</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;%u wbuf %u rbuf</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, prg<span style=color:#f92672>-&gt;</span>n_write_bufs, prg<span style=color:#f92672>-&gt;</span>n_read_bufs);
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>n_write_bufs; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;%u wbuf %u rbuf</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>, prg<span style=color:#f92672>-&gt;</span>n_write_bufs, prg<span style=color:#f92672>-&gt;</span>n_read_bufs);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>size_t</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>n_write_bufs; i<span style=color:#f92672>++</span>) {
 </span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (prg<span style=color:#f92672>-&gt;</span>write_buf_is_kernel_arg[i]) {
-</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;w[%zu] = &#34;</span>, i);
-</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>write_buf_len[i]; j<span style=color:#f92672>++</span>) {
-</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)prg<span style=color:#f92672>-&gt;</span>write_buf_ptr[i])[j]);
+</span></span><span style=display:flex><span>            <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;w[%zu] = &#34;</span>, i);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>size_t</span> j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>write_buf_len[i]; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>                <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)prg<span style=color:#f92672>-&gt;</span>write_buf_ptr[i])[j]);
 </span></span><span style=display:flex><span>            }
-</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
 </span></span><span style=display:flex><span>        } <span style=color:#66d9ef>else</span> {
-</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;w[%zu] = &#34;</span>, i);
-</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>write_buf_len[i] <span style=color:#f92672>*</span> mul_size; j<span style=color:#f92672>++</span>) {
-</span></span><span style=display:flex><span>                printf(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)prg<span style=color:#f92672>-&gt;</span>write_buf_ptr[i])[j]);
+</span></span><span style=display:flex><span>            <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;w[%zu] = &#34;</span>, i);
+</span></span><span style=display:flex><span>            <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>size_t</span> j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> prg<span style=color:#f92672>-&gt;</span>write_buf_len[i] <span style=color:#f92672>*</span> mul_size; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>                <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)prg<span style=color:#f92672>-&gt;</span>write_buf_ptr[i])[j]);
 </span></span><span style=display:flex><span>            }
-</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>            <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
 </span></span><span style=display:flex><span>        }
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>
@@ -191,23 +192,23 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>run_cl_program_end_trace</span>(<span style=color:#66d9ef>void</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (cur_prg <span style=color:#f92672>==</span> NULL) {
-</span></span><span style=display:flex><span>        fprintf(stderr, <span style=color:#e6db74>&#34;oopsie</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
-</span></span><span style=display:flex><span>        abort();
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>fprintf</span>(stderr, <span style=color:#e6db74>&#34;oopsie</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>abort</span>();
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (size_t i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> cur_prg<span style=color:#f92672>-&gt;</span>n_read_bufs; i<span style=color:#f92672>++</span>) {
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;r[%zu] = &#34;</span>, i);
-</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (size_t j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> cur_prg<span style=color:#f92672>-&gt;</span>read_buf_len[i] <span style=color:#f92672>*</span> cur_mul_size; j<span style=color:#f92672>++</span>) {
-</span></span><span style=display:flex><span>            printf(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)cur_prg<span style=color:#f92672>-&gt;</span>read_buf_ptr[i])[j]);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>size_t</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> cur_prg<span style=color:#f92672>-&gt;</span>n_read_bufs; i<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;r[%zu] = &#34;</span>, i);
+</span></span><span style=display:flex><span>        <span style=color:#66d9ef>for</span> (<span style=color:#66d9ef>size_t</span> j <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; j <span style=color:#f92672>&lt;</span> cur_prg<span style=color:#f92672>-&gt;</span>read_buf_len[i] <span style=color:#f92672>*</span> cur_mul_size; j<span style=color:#f92672>++</span>) {
+</span></span><span style=display:flex><span>            <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;%02x&#34;</span>, ((<span style=color:#66d9ef>uint8_t</span><span style=color:#f92672>*</span>)cur_prg<span style=color:#f92672>-&gt;</span>read_buf_ptr[i])[j]);
 </span></span><span style=display:flex><span>        }
-</span></span><span style=display:flex><span>        printf(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span>    cur_prg <span style=color:#f92672>=</span> NULL;
-</span></span><span style=display:flex><span>    printf(<span style=color:#e6db74>&#34;===</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>printf</span>(<span style=color:#e6db74>&#34;===</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>);
 </span></span><span style=display:flex><span>}
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>__attribute__((<span style=color:#66d9ef>naked</span>)) <span style=color:#66d9ef>void</span> run_cl_program_hook(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span><span style=color:#a6e22e>__attribute__</span>((<span style=color:#66d9ef>naked</span>)) <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>run_cl_program_hook</span>(<span style=color:#66d9ef>void</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>asm</span>(<span style=color:#e6db74>&#34;push %rdi;&#34;</span>
 </span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;call run_cl_program_trace;&#34;</span>
 </span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %rdi;&#34;</span>
@@ -222,7 +223,7 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;jmp *%rax;&#34;</span>);
 </span></span><span style=display:flex><span>}
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>__attribute__((<span style=color:#66d9ef>naked</span>)) <span style=color:#66d9ef>void</span> run_cl_program_end_hook(<span style=color:#66d9ef>void</span>) {
+</span></span><span style=display:flex><span><span style=color:#a6e22e>__attribute__</span>((<span style=color:#66d9ef>naked</span>)) <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>run_cl_program_end_hook</span>(<span style=color:#66d9ef>void</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>asm</span>(<span style=color:#e6db74>&#34;pop %rbx;&#34;</span>
 </span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %r12;&#34;</span>
 </span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;pop %r13;&#34;</span>
@@ -235,18 +236,18 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span><span style=display:flex><span>        <span style=color:#e6db74>&#34;ret;&#34;</span>);
 </span></span><span style=display:flex><span>}
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>__attribute__((constructor)) <span style=color:#66d9ef>void</span> instr_init(<span style=color:#66d9ef>int</span> argc, <span style=color:#66d9ef>char</span><span style=color:#f92672>**</span> argv) {
-</span></span><span style=display:flex><span>    assert(argc <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>1</span>);
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (strcmp(argv[<span style=color:#ae81ff>0</span>], <span style=color:#e6db74>&#34;./kraken-patched&#34;</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
+</span></span><span style=display:flex><span><span style=color:#a6e22e>__attribute__</span>((constructor)) <span style=color:#66d9ef>void</span> <span style=color:#a6e22e>instr_init</span>(<span style=color:#66d9ef>int</span> argc, <span style=color:#66d9ef>char</span><span style=color:#f92672>**</span> argv) {
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>assert</span>(argc <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (<span style=color:#a6e22e>strcmp</span>(argv[<span style=color:#ae81ff>0</span>], <span style=color:#e6db74>&#34;./kraken-patched&#34;</span>) <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {
 </span></span><span style=display:flex><span>        <span style=color:#75715e>// We check that we are running attached to `kraken-patched` as we will
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// also be preloaded with `gdbserver`
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#66d9ef>return</span>;
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> mprotect((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555555000</span>, <span style=color:#ae81ff>0x5000</span>, PROT_READ<span style=color:#f92672>|</span>PROT_WRITE<span style=color:#f92672>|</span>PROT_EXEC);
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>mprotect</span>((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555555000</span>, <span style=color:#ae81ff>0x5000</span>, PROT_READ<span style=color:#f92672>|</span>PROT_WRITE<span style=color:#f92672>|</span>PROT_EXEC);
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
-</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mprotect&#34;</span>);
-</span></span><span style=display:flex><span>        _exit(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>perror</span>(<span style=color:#e6db74>&#34;mprotect&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>_exit</span>(<span style=color:#ae81ff>1</span>);
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span>    {
@@ -255,7 +256,7 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>            <span style=color:#ae81ff>0xff</span>, <span style=color:#ae81ff>0xe0</span>,                                                 <span style=color:#75715e>// jmp rax
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>        };
 </span></span><span style=display:flex><span>        <span style=color:#f92672>*</span>(<span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span>)(code <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>) <span style=color:#f92672>=</span> (<span style=color:#66d9ef>uint64_t</span>)run_cl_program_hook;
-</span></span><span style=display:flex><span>        memcpy((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)run_cl_program_start_addr, code, <span style=color:#66d9ef>sizeof</span>(code));
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>memcpy</span>((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)run_cl_program_start_addr, code, <span style=color:#66d9ef>sizeof</span>(code));
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>    {
 </span></span><span style=display:flex><span>        <span style=color:#66d9ef>uint8_t</span> code[] <span style=color:#f92672>=</span> {
@@ -263,13 +264,13 @@ background experience with OpenGL, as it has some common ideas it helped a littl
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>            <span style=color:#ae81ff>0xff</span>, <span style=color:#ae81ff>0xe3</span>,                                                 <span style=color:#75715e>// jmp rbx
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>        };
 </span></span><span style=display:flex><span>        <span style=color:#f92672>*</span>(<span style=color:#66d9ef>uint64_t</span><span style=color:#f92672>*</span>)(code <span style=color:#f92672>+</span> <span style=color:#ae81ff>2</span>) <span style=color:#f92672>=</span> (<span style=color:#66d9ef>uint64_t</span>)run_cl_program_end_hook;
-</span></span><span style=display:flex><span>        memcpy((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)run_cl_program_end_addr, code, <span style=color:#66d9ef>sizeof</span>(code));
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>memcpy</span>((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)run_cl_program_end_addr, code, <span style=color:#66d9ef>sizeof</span>(code));
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>
-</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> mprotect((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555555000</span>, <span style=color:#ae81ff>0x5000</span>, PROT_READ<span style=color:#f92672>|</span>PROT_EXEC);
+</span></span><span style=display:flex><span>    ret <span style=color:#f92672>=</span> <span style=color:#a6e22e>mprotect</span>((<span style=color:#66d9ef>void</span><span style=color:#f92672>*</span>)<span style=color:#ae81ff>0x555555555000</span>, <span style=color:#ae81ff>0x5000</span>, PROT_READ<span style=color:#f92672>|</span>PROT_EXEC);
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (ret <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>0</span>) {
-</span></span><span style=display:flex><span>        perror(<span style=color:#e6db74>&#34;mprotect&#34;</span>);
-</span></span><span style=display:flex><span>        _exit(<span style=color:#ae81ff>1</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>perror</span>(<span style=color:#e6db74>&#34;mprotect&#34;</span>);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>_exit</span>(<span style=color:#ae81ff>1</span>);
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>}
 </span></span></code></pre></div><p>As there isn&rsquo;t enough free space at the beginning and end of the function I was hooking, I manualy copied its prologue
@@ -322,8 +323,8 @@ with <code>p</code> the index in the array of allowed powers</li></ul></li><li><
 what they were doing with the bruteforce approch. By looking at all the possible inputs I was able to understand that it was
 &ldquo;multiplication on 8 bits but it goes whack when overflowing&rdquo;. In the end having the Ghidra decompilation realy helped as I was able
 to Google &ldquo;multiplication xor with <code>0x1b</code>&rdquo; to find it out.</p><p>Cross-referencing my results with the <a href=https://en.wikipedia.org/wiki/Rijndael_MixColumns#Galois_Multiplication_lookup_tables>table used in AES</a>
-helped to confirm it.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>gid_y <span style=color:#f92672>=</span> get_global_id(<span style=color:#ae81ff>0</span>);
-</span></span><span style=display:flex><span>gid_x <span style=color:#f92672>=</span> get_global_id(<span style=color:#ae81ff>1</span>);
+helped to confirm it.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>gid_y <span style=color:#f92672>=</span> <span style=color:#a6e22e>get_global_id</span>(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>gid_x <span style=color:#f92672>=</span> <span style=color:#a6e22e>get_global_id</span>(<span style=color:#ae81ff>1</span>);
 </span></span><span style=display:flex><span>local_20 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
 </span></span><span style=display:flex><span>local_19 <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>;
 </span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> (width <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>) {

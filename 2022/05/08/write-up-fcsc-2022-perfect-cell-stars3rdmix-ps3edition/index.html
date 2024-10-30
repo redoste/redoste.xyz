@@ -1,4 +1,5 @@
-<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition</h2><span class=date>2022-05-08 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2022/>FCSC 2022</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>The description of <em>Perfect Cell</em> states that a friend of us made an homebrew for an &ldquo;amazing multiplayer fighting game&rdquo;. It&rsquo;s joined with a file with the <code>.self</code> extension.</p><p>We&rsquo;ll start with the first obvious thing</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file perfect-cell.self
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition - redoste</title>
+<link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition</h2><span class=date>2022-05-08 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2022/>FCSC 2022</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>The description of <em>Perfect Cell</em> states that a friend of us made an homebrew for an &ldquo;amazing multiplayer fighting game&rdquo;. It&rsquo;s joined with a file with the <code>.self</code> extension.</p><p>We&rsquo;ll start with the first obvious thing</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file perfect-cell.self
 </span></span><span style=display:flex><span>perfect-cell.self: data
 </span></span></code></pre></div><p>Oh.</p><p>That&rsquo;s a good start.</p><p>Binwalk is able to find an ELF header a little bit later in the file but even after removing the first 0x90 bytes the file reamains unusable.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ binwalk -E perfect-cell.self 
 </span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
@@ -43,11 +44,11 @@
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>return</span>;
 </span></span><span style=display:flex><span>}
 </span></span></code></pre></div><p>Let&rsquo;s follow the X-Refs on this one : only one function writes to it, looks like we found the intresting part.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> <span style=color:#ae81ff>6</span>;
-</span></span><span style=display:flex><span>  memcpy(processed_input, PTR_INPUT_BUFFER_0021c4c0 <span style=color:#f92672>+</span> <span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0x60</span>);
+</span></span><span style=display:flex><span>  <span style=color:#a6e22e>memcpy</span>(processed_input, PTR_INPUT_BUFFER_0021c4c0 <span style=color:#f92672>+</span> <span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0x60</span>);
 </span></span><span style=display:flex><span>  piVar9 <span style=color:#f92672>=</span> piVar3;
 </span></span><span style=display:flex><span>  <span style=color:#66d9ef>do</span> {
 </span></span><span style=display:flex><span>    iVar11 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>piVar9;
-</span></span><span style=display:flex><span>    syscall();
+</span></span><span style=display:flex><span>    <span style=color:#a6e22e>syscall</span>();
 </span></span><span style=display:flex><span>    piVar9 <span style=color:#f92672>=</span> piVar9 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>;
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> (iVar11 <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0</span>)
 </span></span><span style=display:flex><span>      <span style=color:#66d9ef>goto</span> LAB_000113c8;
@@ -57,11 +58,11 @@
 </span></span><span style=display:flex><span>  piVar9 <span style=color:#f92672>=</span> piVar3 <span style=color:#f92672>+</span> <span style=color:#ae81ff>3</span>;
 </span></span><span style=display:flex><span>  <span style=color:#66d9ef>do</span> {
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>while</span> (<span style=color:#f92672>*</span>piVar9 <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
-</span></span><span style=display:flex><span>      sync(<span style=color:#ae81ff>0</span>);
+</span></span><span style=display:flex><span>      <span style=color:#a6e22e>sync</span>(<span style=color:#ae81ff>0</span>);
 </span></span><span style=display:flex><span>    }
 </span></span><span style=display:flex><span>    piVar9 <span style=color:#f92672>=</span> piVar9 <span style=color:#f92672>+</span> <span style=color:#ae81ff>8</span>;
 </span></span><span style=display:flex><span>  } <span style=color:#66d9ef>while</span> (piVar3 <span style=color:#f92672>+</span> <span style=color:#ae81ff>0x33</span> <span style=color:#f92672>!=</span> piVar9);
-</span></span><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> memcmp(processed_input, PTR_EXPECTED_0021c4e8, <span style=color:#ae81ff>0x60</span>);
+</span></span><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> <span style=color:#a6e22e>memcmp</span>(processed_input, PTR_EXPECTED_0021c4e8, <span style=color:#ae81ff>0x60</span>);
 </span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (lVar4 <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
 </span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#f92672>*</span>(undefined4 <span style=color:#f92672>*</span>)PTR_WIN_STATE_WANTS_2_0021c380 <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;
@@ -82,9 +83,9 @@ The bytes that seems to be our input have been copied from an other global index
 </span></span><span style=display:flex><span>        local_a0 <span style=color:#f92672>=</span> uVar10;
 </span></span><span style=display:flex><span>        local_98 <span style=color:#f92672>=</span> uVar11;
 </span></span><span style=display:flex><span>        local_90 <span style=color:#f92672>=</span> uVar1;
-</span></span><span style=display:flex><span>        send(socket, <span style=color:#f92672>&amp;</span>local_b0, <span style=color:#ae81ff>0x23</span>, flags);
-</span></span><span style=display:flex><span>        memset(buffer, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0x800</span>);
-</span></span><span style=display:flex><span>        sVar6 <span style=color:#f92672>=</span> recv(socket, buffer, <span style=color:#ae81ff>0x7ff</span>, flags);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>send</span>(socket, <span style=color:#f92672>&amp;</span>local_b0, <span style=color:#ae81ff>0x23</span>, flags);
+</span></span><span style=display:flex><span>        <span style=color:#a6e22e>memset</span>(buffer, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0x800</span>);
+</span></span><span style=display:flex><span>        sVar6 <span style=color:#f92672>=</span> <span style=color:#a6e22e>recv</span>(socket, buffer, <span style=color:#ae81ff>0x7ff</span>, flags);
 </span></span><span style=display:flex><span>        <span style=color:#66d9ef>if</span> (sVar6 <span style=color:#f92672>&lt;</span> <span style=color:#ae81ff>1</span>) {
 </span></span><span style=display:flex><span>          <span style=color:#66d9ef>return</span> <span style=color:#f92672>-</span><span style=color:#ae81ff>1</span>;
 </span></span><span style=display:flex><span>        }
