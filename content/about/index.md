@@ -5,9 +5,8 @@ draft: false
 
 * Certified rev witch and cursed computing summoner
 * CTF player
-* Gender SIGSEGVer (she/they online, she/they/he irl (for now))
+* Gender SIGSEGVer 🦈 🏳️‍⚧️  (she/they online, she/they/he irl (for now))
 * French engineering student
-* SciADV enjoyer
 
 ---
 ### Contact
