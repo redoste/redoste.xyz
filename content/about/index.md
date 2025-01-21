@@ -14,5 +14,6 @@ draft: false
 
 * **Github** : [redoste](https://github.com/redoste)
 * **E-Mail** : {{< email >}}
-* **Twitter** : Account now in "read-only", I'm only keeping the handle registered : [@redoste](https://twitter.com/redoste)
+* **Socials** : @redoste on twitter and u/reDOSte on reddit are mine, but I stopped using social media in general.\
+If you need to contact me, prefer e-mail and we will exchange IMs if it's required.
 
