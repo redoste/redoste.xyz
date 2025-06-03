@@ -7,7 +7,8 @@ function showEmail(){
 	var span = document.querySelector("#email-button-span");
 	span.innerHTML = "<code>Please wait 0.5 seconds...</code>";
 	setTimeout(function(){
-		var splited_domain = window.location.hostname.split(".");
+		// We use the filter in case for some reason someone is browsing on the FQDN
+		var splited_domain = window.location.hostname.split(".").filter(x => x.length > 0);
 		var sd_len = splited_domain.length;
 		var username = splited_domain[sd_len - 2];
 		var domain = splited_domain[sd_len - 2] + "." + splited_domain[sd_len - 1];
