@@ -30,7 +30,7 @@ jobs:
       run: |
         git checkout gh-pages
         git clean -fdx
-        rsync --archive --verbose --checksum ../public/ .
+        rsync --archive --verbose --checksum --delete --exclude /.git/ --exclude /CNAME ../public/ .
         rm -r ../public/
         git add .
         git config user.name "github-actions[bot]"
