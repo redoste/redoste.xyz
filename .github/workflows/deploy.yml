@@ -25,7 +25,7 @@ jobs:
       run: |
         git checkout "${{ github.sha }}"
         mkdir -p ../public
-        hugo -d ../public --minify
+        hugo -d ../public --minify --buildFuture
     - name: Commit
       run: |
         git checkout gh-pages
