@@ -1,0 +1,11 @@
+<span id="theendisnevertheend"></span>
+<script>
+function updateEnd() {
+	let span = document.querySelector("#theendisnevertheend");
+	if (document.documentElement.scrollTop + document.documentElement.clientHeight >= document.documentElement.scrollHeight - 110) {
+		span.textContent += "{{ .Get 0 }}";
+	}
+	requestAnimationFrame(updateEnd);
+}
+requestAnimationFrame(updateEnd);
+</script>
