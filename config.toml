@@ -12,7 +12,7 @@ enableRobotsTXT = true
 	home = ["HTML"]
 	page = ["HTML"]
 	taxonomy = ["HTML"]
-	taxonomyTerm = ["HTML"]
+	term = ["HTML"]
 	section = ["HTML", "RSS"]
 
 [permalinks]
