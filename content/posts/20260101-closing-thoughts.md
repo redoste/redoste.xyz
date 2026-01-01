@@ -5,7 +5,7 @@ draft: false
 tags:
 - health
 - mental health
-- personnal
+- personal
 - non-technical
 ---
 
