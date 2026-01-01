@@ -1,5 +1,4 @@
-<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up UIUCTF 2021 : ropfuscated - redoste</title>
-<link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up UIUCTF 2021 : ropfuscated</h2><span class=date>2021-08-03 00:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/uiuctf/>UIUCTF</a></li><li><a href=/tags/uiuctf-2021/>UIUCTF 2021</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>ropfuscated</em> is composed of a single but huge (4.1MiB, that&rsquo;s about half of the Linux kernel installed on my laptop) x86-64 Linux binary.
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up UIUCTF 2021 : ropfuscated - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up UIUCTF 2021 : ropfuscated</h2><span class=date>2021-08-03 00:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/uiuctf/>UIUCTF</a></li><li><a href=/tags/uiuctf-2021/>UIUCTF 2021</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>ropfuscated</em> is composed of a single but huge (4.1MiB, that&rsquo;s about half of the Linux kernel installed on my laptop) x86-64 Linux binary.
 Running it for the first time, we are greated by a message asking us to draw a patern with the mouse in a way that mimic the Android lockscreen.
 Some ANSI terminal magic allows the program to follow the mouse and draw the pattern with tildes. After releasing the left click, the program checks the pattern and awnsers <code>Sorry, try again!</code>.</p><p>Throwing the executable into Ghidra reveals next to nothing, there is a <code>main()</code> function that initialize the terminal stuff and then a simple function <code>rop()</code> is called :</p><pre tabindex=0><code>         rop
 00401310 LEA        RSP,[rop_chain]
@@ -300,12 +299,12 @@ This is when I started using traces of patterns with different lengths, now some
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                  0000000000000003
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+                 0000000000000007
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000007
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000007
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 00000000004013B8 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E560
+</span></span></span><span style=display:flex><span> 00000000004013B8 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E560
 </span></span><span style=display:flex><span> 0000000000401374 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E568
 </span></span><span style=display:flex><span> 0000000000401351 0000000000000000 0000000000404094 000000000000000A 0000000000000001 0000000000404094 0000000000000001 000000000023E578
 </span></span></code></pre></div><p>(It&rsquo;s difficult to make things stand out in markdown so I edited all the diffs to only keep the registers that are different.)</p><p>Looks like the length of the input is used in some way here. Let&rsquo;s take a look at the pseudocode between 0x23E508 and 0x23E578.</p><pre tabindex=0><code>0x0023E508 : bl -= al (borrow)
@@ -362,7 +361,7 @@ This is when I started using traces of patterns with different lengths, now some
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5E                  FFFFFFFFFFA08D5D
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                 FFFFFFFFFFA08D5E                  FFFFFFFFFFA08D5D
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   FFFFFFFFFFA08D5D
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+                                                   0000000000000003
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000003
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  0000000000000003 0000000000000003
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D5F 0000000000000003 0000000000000003
@@ -381,7 +380,7 @@ This is when I started using traces of patterns with different lengths, now some
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D60                  FFFFFFFFFFA08D5F
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 FFFFFFFFFFA08D60                  FFFFFFFFFFA08D5F
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   FFFFFFFFFFA08D5F
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 0000000000401368 00000000004040B4 0000000000404094 000000000000048C 0000000000000001 00000000000005C6 0000000000000001 000000000024B4B0
+</span></span></span><span style=display:flex><span> 0000000000401368 00000000004040B4 0000000000404094 000000000000048C 0000000000000001 00000000000005C6 0000000000000001 000000000024B4B0
 </span></span><span style=display:flex><span> 000000000040133C 000000000000048C 0000000000404094 00000000004040B4 0000000000000001 00000000000005C6 0000000000000001 000000000024B4B8
 </span></span><span style=display:flex><span> 00000000004013B8 000000000000048C 00000000004040AC 00000000004040B4 0000000000000001 00000000000005C6 0000000000000001 000000000024B4C8
 </span></span></code></pre></div><p>So it looks like our input is added to that <code>0xFFFFFFFFFFA08D5C</code> constant and incremented.</p><p>We can use grep to check that this part is repeated for each input :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ grep 000000000024B3D8 unicorn.log
@@ -419,7 +418,7 @@ Now the trace that doesn&rsquo;t begin with a 5 is way bigger, looks like we wen
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
 </span></span></span><span style=display:flex><span><span style=color:#f92672>-                                                   0000000000000000
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+                                  FFFFFFFFFFCF05F0
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  FFFFFFFFFFCF05F0
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                  FFFFFFFFFFCF05F0
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005 FFFFFFFFFFCF05F0
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                 0000000000000005 FFFFFFFFFFCF05F0 0000000000000005
@@ -438,7 +437,7 @@ Now the trace that doesn&rsquo;t begin with a 5 is way bigger, looks like we wen
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+                                                   0000000000000005
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 0000000000401368 0000000000404094 000000000000048A 000000000000048A 0000000000000001 0000000000404094 0000000000000001 00000000002598F0
+</span></span></span><span style=display:flex><span> 0000000000401368 0000000000404094 000000000000048A 000000000000048A 0000000000000001 0000000000404094 0000000000000001 00000000002598F0
 </span></span><span style=display:flex><span> 0000000000401339 000000000000048A 0000000000404094 000000000000048A 0000000000000001 0000000000404094 0000000000000001 00000000002598F8
 </span></span><span style=display:flex><span> 000000000040135C 000000000000048A 000000000000048A 000000000000048A 0000000000000001 0000000000404094 0000000000000001 0000000000259900
 </span></span></code></pre></div><p>Looks like our transformed input is added to 0x30FA15 and it, somehow, ended the check when we used a 5.
@@ -666,4 +665,4 @@ X, 1, 7, 5, 3, 2, 8, 0, 6
                    ~
          # ~~~~~~~ # ~~~~~~~ #
 </code></pre><pre tabindex=0><code>uiuctf{which_shows_that_rop_is_turing_complete_QED}
-</code></pre><p>Just before I solved the challenge (at 0514 CEST on the 1st) a hint was released (at 0205 CEST) about how the challenge was built. The challenge authors used <a href=https://github.com/shinh/elvm>elvm</a>, so my first theory was right, maybe building a proper disassembler would have been faster.</p><p>In the end I spent nearly 24 hours on this challenge and wasn&rsquo;t really able to solve any other ones (except for a few really easy reverse) because I wasn&rsquo;t available the second day.</p><p>Donc gros GG à tout le reste de l&rsquo;équipe pour nous avoir propulsé aussi haut dans le classement !</p></main><hr><footer>© 2020 - 2025 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
+</code></pre><p>Just before I solved the challenge (at 0514 CEST on the 1st) a hint was released (at 0205 CEST) about how the challenge was built. The challenge authors used <a href=https://github.com/shinh/elvm>elvm</a>, so my first theory was right, maybe building a proper disassembler would have been faster.</p><p>In the end I spent nearly 24 hours on this challenge and wasn&rsquo;t really able to solve any other ones (except for a few really easy reverse) because I wasn&rsquo;t available the second day.</p><p>Donc gros GG à tout le reste de l&rsquo;équipe pour nous avoir propulsé aussi haut dans le classement !</p></main><hr><footer>© 2020 - 2026 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>

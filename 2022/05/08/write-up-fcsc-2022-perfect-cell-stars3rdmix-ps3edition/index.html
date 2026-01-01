@@ -1,9 +1,8 @@
-<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition - redoste</title>
-<link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition</h2><span class=date>2022-05-08 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2022/>FCSC 2022</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>The description of <em>Perfect Cell</em> states that a friend of us made an homebrew for an &ldquo;amazing multiplayer fighting game&rdquo;. It&rsquo;s joined with a file with the <code>.self</code> extension.</p><p>We&rsquo;ll start with the first obvious thing</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file perfect-cell.self
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>Write-up FCSC 2022 : Perfect Cell - Stars:3rdMix PS3Edition</h2><span class=date>2022-05-08 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2022/>FCSC 2022</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p>The description of <em>Perfect Cell</em> states that a friend of us made an homebrew for an &ldquo;amazing multiplayer fighting game&rdquo;. It&rsquo;s joined with a file with the <code>.self</code> extension.</p><p>We&rsquo;ll start with the first obvious thing</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ file perfect-cell.self
 </span></span><span style=display:flex><span>perfect-cell.self: data
 </span></span></code></pre></div><p>Oh.</p><p>That&rsquo;s a good start.</p><p>Binwalk is able to find an ELF header a little bit later in the file but even after removing the first 0x90 bytes the file reamains unusable.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-console data-lang=console><span style=display:flex><span>$ binwalk -E perfect-cell.self 
 </span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
-</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>DECIMAL       HEXADECIMAL     ENTROPY
+</span></span></span><span style=display:flex><span>DECIMAL       HEXADECIMAL     ENTROPY
 </span></span><span style=display:flex><span>--------------------------------------------------------------------------------
 </span></span><span style=display:flex><span>0             0x0             Falling entropy edge (0.246619)
 </span></span><span style=display:flex><span>1024          0x400           Rising entropy edge (0.973705)
@@ -23,25 +22,25 @@
 </span></span><span style=display:flex><span>========================================================
 </span></span><span style=display:flex><span>Welcome to Pefect Cell!
 </span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
-</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>Please provide a correct input ...
+</span></span></span><span style=display:flex><span>Please provide a correct input ...
 </span></span><span style=display:flex><span>FCSC{AAAAA}
 </span></span><span style=display:flex><span>Please provide a correct input ...
 </span></span></code></pre></div><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-002.png alt='"Connected and Playing!" screen'><p>Now that we know how the binary behave, let&rsquo;s try to decrypt to SELF and reverse it. Looking arround I found <a href=https://www.psdevwiki.com/ps3/Dev_Tools#Break_N_Make_.28MakeSelf_.26_BreakSelf.29>BreakSelf</a> capable of doing it. After getting a clean cleartext ELF we can import it into Ghidra to look arround.</p><h1 id=ii---reversing-the-ppu-binary>II - Reversing the PPU Binary</h1><p>After analysing the binary there weren&rsquo;t a lot of code. Even after looking for the success and failure strings they didn&rsquo;t have any X-Refs. Looks like something went wrong. I tried the aggressive instruction finder but it complained that there were not enough functions (isn&rsquo;t finding new functions the goal of the AIF ?)</p><p>Let&rsquo;s look into the debugger : after enabling it in RPCS3 we get a new pane with disassembly and register views. After an awkward amount of time I understood that I needed to select a thread in the little menu on the top right to see the disassembly.</p><p>We can now select the main thread and look up in the backtrace. Since we are waiting for an incomming TCP connection on port 1337 we should be inside the accept syscall. After finding the first address that was in the address space of the homebrew I looked it up in ghidra and frantically pressed D to discover as much code as possible before relaunching an analysis.</p><p>Well now we should have enough code. Let&rsquo;s go take back a look at the strings. Still no X-Refs ?</p><p>After taking a look at the code we just disassembled, there were a lot of references to r2. This reminded me of a concept of PowerPC. The <em>Small Data Array</em> or SDA, I have already encourted it when I did some reversing on the <a href=/2020/04/21/modding-wii-sports-part-i-identifying-files-and-creating-a-debug-output/#ii---reverse-engineering-the-binary>Wii 2 years ago</a>.</p><p>The quick version is that PowerPC is a RISC architecure and it requires multiple instrctions to load a global, so the compiler will put all the most used globals in the same area and set a register as constant for the entirety of the program. Now when the program needs to use one of those globals it can just reference it relative to the SDA register, this will only require one instruction.</p><p>Ghidra supports SDA but you need to declare it in the Register Manager. I copied the value of r2 from the debugger and declared it as constant for the entirety of the program. After a quick reanalysis all the accesses relative to r2 are decompiled as global variable accesses.</p><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-003.png alt="Ghidra Register Manager"><p>We can now follow the strings we looked at earlier. They are referenced from a function with a lot of code. We will just ignore it because it&rsquo;s probably just some calls to PS3 APIs for displaying text on the screen. An intresting part of it is the read of a global variable that will decide if the success of failure text should be shown.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>display_str</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>param_1, <span style=color:#66d9ef>int</span> param_2) {
 </span></span><span style=display:flex><span>  <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  puVar1 <span style=color:#f92672>=</span> PTR_WIN_STATE_WANTS_2_0021c380;
+</span></span></span><span style=display:flex><span>  puVar1 <span style=color:#f92672>=</span> PTR_WIN_STATE_WANTS_2_0021c380;
 </span></span><span style=display:flex><span>  <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)puVar1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>) {
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)puVar1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>1</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    local_b0 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(undefined8 <span style=color:#f92672>*</span>)PTR_s_You_Lose<span style=color:#f92672>!</span>_0021c438;
+</span></span></span><span style=display:flex><span>    local_b0 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(undefined8 <span style=color:#f92672>*</span>)PTR_s_You_Lose<span style=color:#f92672>!</span>_0021c438;
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span></span><span style=display:flex><span>  }
 </span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>*</span>(<span style=color:#66d9ef>int</span> <span style=color:#f92672>*</span>)puVar1 <span style=color:#f92672>==</span> <span style=color:#ae81ff>2</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    local_b0 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(undefined8 <span style=color:#f92672>*</span>)PTR_s_You_Win<span style=color:#f92672>!</span>_0021c450;
+</span></span></span><span style=display:flex><span>    local_b0 <span style=color:#f92672>=</span> <span style=color:#f92672>*</span>(undefined8 <span style=color:#f92672>*</span>)PTR_s_You_Win<span style=color:#f92672>!</span>_0021c450;
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span></span><span style=display:flex><span>  }
 </span></span><span style=display:flex><span>  <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#66d9ef>return</span>;
+</span></span></span><span style=display:flex><span>  <span style=color:#66d9ef>return</span>;
 </span></span><span style=display:flex><span>}
 </span></span></code></pre></div><p>Let&rsquo;s follow the X-Refs on this one : only one function writes to it, looks like we found the intresting part.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> <span style=color:#ae81ff>6</span>;
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>memcpy</span>(processed_input, PTR_INPUT_BUFFER_0021c4c0 <span style=color:#f92672>+</span> <span style=color:#ae81ff>5</span>, <span style=color:#ae81ff>0x60</span>);
@@ -65,9 +64,9 @@
 </span></span><span style=display:flex><span>  lVar4 <span style=color:#f92672>=</span> <span style=color:#a6e22e>memcmp</span>(processed_input, PTR_EXPECTED_0021c4e8, <span style=color:#ae81ff>0x60</span>);
 </span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (lVar4 <span style=color:#f92672>==</span> <span style=color:#ae81ff>0</span>) {
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#f92672>*</span>(undefined4 <span style=color:#f92672>*</span>)PTR_WIN_STATE_WANTS_2_0021c380 <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;
+</span></span></span><span style=display:flex><span>    <span style=color:#f92672>*</span>(undefined4 <span style=color:#f92672>*</span>)PTR_WIN_STATE_WANTS_2_0021c380 <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>;
 </span></span><span style=display:flex><span>    <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  }
+</span></span></span><span style=display:flex><span>  }
 </span></span></code></pre></div><p>The global is set to 2 only if the earlier function returns 0. A quick look reveals that it&rsquo;s just a <code>memcmp</code>, the input proabably goes through some transformations before getting compared to hardcoded bytes.
 The bytes that seems to be our input have been copied from an other global indexed by 5 (<code>FCSC{</code> is 5 charcters long).</p><p>Following the X-Refs once again we can see this global array was written by a loop that waits for a function to to return 0x67. It&rsquo;s probably <code>recv</code> so we should provide an input 102 characters long (-1 for the newline) to the program for the transformations to get applied.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>  buffer <span style=color:#f92672>=</span> PTR_INPUT_BUFFER_0021c4c0;
 </span></span><span style=display:flex><span>  <span style=color:#66d9ef>if</span> (<span style=color:#f92672>-</span><span style=color:#ae81ff>1</span> <span style=color:#f92672>&lt;</span> sVar6) {
@@ -91,7 +90,7 @@ The bytes that seems to be our input have been copied from an other global index
 </span></span><span style=display:flex><span>        }
 </span></span><span style=display:flex><span>      } <span style=color:#66d9ef>while</span> (sVar6 <span style=color:#f92672>!=</span> <span style=color:#ae81ff>0x67</span>);
 </span></span><span style=display:flex><span>      <span style=color:#75715e>// [...]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    } <span style=color:#66d9ef>while</span> ((bVar2) <span style=color:#f92672>||</span> (puVar3[<span style=color:#ae81ff>0x65</span>] <span style=color:#f92672>!=</span> <span style=color:#e6db74>&#39;}&#39;</span>));
+</span></span></span><span style=display:flex><span>    } <span style=color:#66d9ef>while</span> ((bVar2) <span style=color:#f92672>||</span> (puVar3[<span style=color:#ae81ff>0x65</span>] <span style=color:#f92672>!=</span> <span style=color:#e6db74>&#39;}&#39;</span>));
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> (longlong)iVar5;
 </span></span><span style=display:flex><span>  }
 </span></span></code></pre></div><p>That&rsquo;s cool : we have a whole lot of informations about the context but where is crypto ? The only other call beetween the <code>memcpy</code> and the <code>memcmp</code> is a syscall and I doubt the PS3 has a <code>mangle_flag_for_fcsc</code> syscall.</p><p>Let&rsquo;s take a look in the debugger :</p><pre tabindex=0><code>[000115d8]  44 00 00 02: sc #sys_spu_thread_write_snr
@@ -168,40 +167,40 @@ No version information found in this file.
 </code></pre><p>Here the entry point is set to the beginning of the <code>spu5</code> function.</p><p>Launching the emulator seems to work but it still needs some modifictions :</p><p>First we will enable the intructions and memory accesses debugging as they will be very helpful when reading the traces.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/config.h b/config.h
 </span></span><span style=display:flex><span>index 9cd886b..87c73aa 100644
 </span></span><span style=display:flex><span><span style=color:#f92672>--- a/config.h
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/config.h
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -6,10 +6,10 @@
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> #define CONFIG_H__
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+++ b/config.h
+</span></span></span><span style=display:flex><span><span style=color:#75715e>@@ -6,10 +6,10 @@
+</span></span></span><span style=display:flex><span> #define CONFIG_H__
 </span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span> #define DEBUG
 </span></span><span style=display:flex><span><span style=color:#f92672>-//#define DEBUG_INSTR
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+#define DEBUG_INSTR
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> //#define DEBUG_GDB
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+#define DEBUG_INSTR
+</span></span></span><span style=display:flex><span> //#define DEBUG_GDB
 </span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span><span style=color:#f92672>-//#define DEBUG_INSTR_MEM
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+#define DEBUG_INSTR_MEM
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> #define DEBUG_TRACE
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+#define DEBUG_INSTR_MEM
+</span></span></span><span style=display:flex><span> #define DEBUG_TRACE
 </span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span> //#define FAIL_DUMP_REGS
 </span></span></code></pre></div><p>We will also set a stop address as everything after this is just resposible to write back the transformed data. I&rsquo;ve checked with RPCS3 debugger that all the SPUs finished their work when coming at this address. This will make the traces way shorter and easier to work with.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/emulate.c b/emulate.c
 </span></span><span style=display:flex><span>index a1dd5e8..c19707f 100644
 </span></span><span style=display:flex><span><span style=color:#f92672>--- a/emulate.c
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/emulate.c
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -187,6 +187,9 @@ u32 emulate(void)
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	if ((ctx-&gt;pc &amp; 3) != 0)
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+++ b/emulate.c
+</span></span></span><span style=display:flex><span><span style=color:#75715e>@@ -187,6 +187,9 @@ u32 emulate(void)
+</span></span></span><span style=display:flex><span>	if ((ctx-&gt;pc &amp; 3) != 0)
 </span></span><span style=display:flex><span>		fail(&#34;pc is not aligned: %08x&#34;, ctx-&gt;pc);
 </span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span><span style=color:#a6e22e>+	if(ctx-&gt;pc == 0x2B4)
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		return 1;
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> //	dbgprintf(&#34;\n\n&#34;, count);
+</span></span></span><span style=display:flex><span> //	dbgprintf(&#34;\n\n&#34;, count);
 </span></span><span style=display:flex><span>	return 0;
 </span></span><span style=display:flex><span> }
 </span></span></code></pre></div><p>Finally we will initialize the stack pointer (r1) and write the flag input from a file. This will allow us to generate traces for different test patterns.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/main.c b/main.c
 </span></span><span style=display:flex><span>index f85547b..f033ffd 100644
 </span></span><span style=display:flex><span><span style=color:#f92672>--- a/main.c
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/main.c
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -124,6 +124,18 @@ int main(int argc, char *argv[])
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>	wbe32(ctx-&gt;ls + 0x3f008, 0x10000);
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+++ b/main.c
+</span></span></span><span style=display:flex><span><span style=color:#75715e>@@ -124,6 +124,18 @@ int main(int argc, char *argv[])
+</span></span></span><span style=display:flex><span>	wbe32(ctx-&gt;ls + 0x3f008, 0x10000);
 </span></span><span style=display:flex><span>	wbe32(ctx-&gt;ls + 0x3e000, 0xff);
 </span></span><span style=display:flex><span> #endif
 </span></span><span style=display:flex><span><span style=color:#a6e22e>+	ctx-&gt;reg[1][0] = 0x3FF00;
@@ -216,28 +215,28 @@ No version information found in this file.
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		wbe64(ctx-&gt;ls + 0x3FF00 + 0x30 + (idx * 8), __builtin_bswap64(flag[idx]));
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	}
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	fclose(inp);
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 
+</span></span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span>	if (gdb_port &lt; 0) {
 </span></span><span style=display:flex><span>		ctx-&gt;paused = 0;
 </span></span></code></pre></div><p>The input is a little bit bigger than required because the flag portion is present multiple times and some other constants are loaded with it from the main CPU.</p><p>I changed the entry point of the ELF to test different SPUs code but two of them failed. With some single stepping in the debugger I was able to identify a faulty instruction, <code>andhi</code> was not reading from <code>ra</code>. On the other hand <code>shlhi</code> was simply not implemented.</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-patch data-lang=patch><span style=display:flex><span>diff --git a/instrs b/instrs
 </span></span><span style=display:flex><span>index b77d65a..fa169bd 100644
 </span></span><span style=display:flex><span><span style=color:#f92672>--- a/instrs
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+++ b/instrs
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span><span style=color:#75715e>@@ -681,11 +681,11 @@
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span> 
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+++ b/instrs
+</span></span></span><span style=display:flex><span><span style=color:#75715e>@@ -681,11 +681,11 @@
+</span></span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span> 00010101,ri10,andhi,half,signed
 </span></span><span style=display:flex><span> {
 </span></span><span style=display:flex><span>	int i;
 </span></span><span style=display:flex><span>	for (i = 0; i &lt; 8; ++i)
 </span></span><span style=display:flex><span><span style=color:#f92672>-		rth[i] &amp;= i10;
-</span></span></span><span style=display:flex><span><span style=color:#f92672></span><span style=color:#a6e22e>+		rth[i] = rah[i] &amp; i10;
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> }
+</span></span></span><span style=display:flex><span><span style=color:#a6e22e>+		rth[i] = rah[i] &amp; i10;
+</span></span></span><span style=display:flex><span> }
 </span></span><span style=display:flex><span> 
 </span></span><span style=display:flex><span> 00010100,ri10,andi,signed
 </span></span><span style=display:flex><span> {
 </span></span><span style=display:flex><span>	int i;
 </span></span><span style=display:flex><span><span style=color:#75715e>@@ -1005,10 +1005,23 @@
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>		else
+</span></span></span><span style=display:flex><span>		else
 </span></span><span style=display:flex><span>			rtw[i] = raw[i] &lt;&lt; shift_count;
 </span></span><span style=display:flex><span>	}
 </span></span><span style=display:flex><span> }
@@ -255,7 +254,7 @@ No version information found in this file.
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+	}
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+}
 </span></span></span><span style=display:flex><span><span style=color:#a6e22e>+
-</span></span></span><span style=display:flex><span><span style=color:#a6e22e></span> 00001011011,rr,shl
+</span></span></span><span style=display:flex><span> 00001011011,rr,shl
 </span></span><span style=display:flex><span> {
 </span></span><span style=display:flex><span>	int i;
 </span></span><span style=display:flex><span>	for (i = 0; i &lt; 4; ++i)
@@ -394,7 +393,7 @@ No version information found in this file.
 </span></span><span style=display:flex><span>========================================================
 </span></span><span style=display:flex><span>Welcome to Pefect Cell!
 </span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010>
-</span></span></span><span style=display:flex><span><span style=color:#960050;background-color:#1e0010></span>Please provide a correct input ...
+</span></span></span><span style=display:flex><span>Please provide a correct input ...
 </span></span><span style=display:flex><span>FCSC{30gbt9RzIif5L_s70cRm7gXHm_R-8WkKTVxSjeL5H9gjVnzkSJBg3y4prWG4tU_5-10yxW8uYzWNMY54ssDcpRHfKZ8KZkX3}
 </span></span><span style=display:flex><span>Well done, this is a win! :-)
-</span></span></code></pre></div><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-004.png alt='"You Win!" screen'></main><hr><footer>© 2020 - 2025 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
+</span></span></code></pre></div><img src=/img/20220508-FCSC-2022-Perfect-Cell-Stars-3rdMix-PS3Edition/Perfect-Cell-004.png alt='"You Win!" screen'></main><hr><footer>© 2020 - 2026 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>

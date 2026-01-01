@@ -1,5 +1,4 @@
-<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>[FR] Write-up FCSC 2021 : VMV - redoste</title>
-<link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>[FR] Write-up FCSC 2021 : VMV</h2><span class=date>2021-05-03 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2021/>FCSC 2021</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>VMV</em> se compose d&rsquo;un simple executable ELF pour Linux x86-64. Il demande une chaine de 16 caractères de long en entrée et est censé nous indiquer s&rsquo;il s&rsquo;aggit du bon flag.</p><p>On peut essayer de l&rsquo;executer pour voir :</p><pre tabindex=0><code>$ ./vmv 0123456789ABCDEF
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>[FR] Write-up FCSC 2021 : VMV - redoste</title><link rel=stylesheet type=text/css href=/css/main.css></head><body><header><a href=/><h2>redoste</h2></a><nav><ul><li><a href=/about/>About</a></li><li><a href=/projects/>Projects</a></li><li><a href=/posts/index.xml>RSS</a></li></ul></nav></header><hr><main><h2>[FR] Write-up FCSC 2021 : VMV</h2><span class=date>2021-05-03 18:00 +0200</span><hr><nav><ul><li><a href=/tags/ctf/>CTF</a></li><li><a href=/tags/fcsc/>FCSC</a></li><li><a href=/tags/fcsc-2021/>FCSC 2021</a></li></ul></nav><hr><h1 id=i---intro>I - Intro</h1><p><em>VMV</em> se compose d&rsquo;un simple executable ELF pour Linux x86-64. Il demande une chaine de 16 caractères de long en entrée et est censé nous indiquer s&rsquo;il s&rsquo;aggit du bon flag.</p><p>On peut essayer de l&rsquo;executer pour voir :</p><pre tabindex=0><code>$ ./vmv 0123456789ABCDEF
 [fr] Ne quittez pas, un correspondant va prendre votre appel... [\fr]
 * bruit de ventilateur de PC qui accélère *
 [fr] Ne quittez pas, un correspondant va prendre votre appel... [\fr]
@@ -225,7 +224,7 @@
 </span></span><span style=display:flex><span><span style=color:#f92672>import</span> struct
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Dissassembly</span>:
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>def</span> __init__(self, rom, reg_key, print_key, opcodes):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>__init__</span>(self, rom, reg_key, print_key, opcodes):
 </span></span><span style=display:flex><span>        self<span style=color:#f92672>.</span>rom_pool <span style=color:#f92672>=</span> rom
 </span></span><span style=display:flex><span>        self<span style=color:#f92672>.</span>reg_key <span style=color:#f92672>=</span> reg_key
 </span></span><span style=display:flex><span>        self<span style=color:#f92672>.</span>print_key <span style=color:#f92672>=</span> print_key
@@ -369,7 +368,7 @@
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> d
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>class</span> <span style=color:#a6e22e>Parser</span>:
-</span></span><span style=display:flex><span>    <span style=color:#66d9ef>def</span> __init__(self, dissassembly):
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>__init__</span>(self, dissassembly):
 </span></span><span style=display:flex><span>        self<span style=color:#f92672>.</span>dissassembly <span style=color:#f92672>=</span> dissassembly<span style=color:#f92672>.</span>split(<span style=color:#e6db74>&#34;</span><span style=color:#ae81ff>\n</span><span style=color:#e6db74>&#34;</span>)
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span>    <span style=color:#66d9ef>def</span> <span style=color:#a6e22e>get_reg_key</span>(self):
@@ -512,7 +511,7 @@ FLAG[3] % 0x000077F3 = 0x000028B2
 FLAG[3] % 0x00007C49 = 0x000044A9
 </code></pre><h1 id=v---conclusion>V - Conclusion</h1><p>Cela ne semble pas très complexe à brute-force, mais j&rsquo;ai rencontré quelques problèmes, notament sur la multiplication. En effet la VM n&rsquo;implemente pas une &ldquo;vraie&rdquo; multiplication. J&rsquo;ai essayé de reimplémenter la chose en me basant sur la decompilation de Ghidra mais cela n&rsquo;a pas fonctionné : il n&rsquo;y avait aucune solution.</p><p>J&rsquo;ai donc fini par opter pour une solution plus radicale, j&rsquo;ai simplement et bêtement copié l&rsquo;assembleur x86 du binaire dans mon programme de brute-force :</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdint.h&gt;</span><span style=color:#75715e>
 </span></span></span><span style=display:flex><span><span style=color:#75715e>#include</span> <span style=color:#75715e>&lt;stdio.h&gt;</span><span style=color:#75715e>
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>uint32_t</span> <span style=color:#a6e22e>mul_weird</span>(<span style=color:#66d9ef>uint64_t</span> a, <span style=color:#66d9ef>uint64_t</span> b);
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> <span style=color:#a6e22e>main</span>() {
@@ -550,7 +549,7 @@ FLAG[3] % 0x00007C49 = 0x000044A9
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>mov</span> <span style=color:#66d9ef>rax</span>, <span style=color:#66d9ef>rdi</span>
 </span></span><span style=display:flex><span>
 </span></span><span style=display:flex><span>  <span style=color:#75715e>; Partie copiée du binaire d&#39;origine
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#a6e22e>MOV</span>        <span style=color:#66d9ef>RCX</span>,<span style=color:#66d9ef>RDX</span>
+</span></span></span><span style=display:flex><span>  <span style=color:#a6e22e>MOV</span>        <span style=color:#66d9ef>RCX</span>,<span style=color:#66d9ef>RDX</span>
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>IMUL</span>       <span style=color:#66d9ef>RCX</span>,<span style=color:#66d9ef>RAX</span>
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>MOV</span>        <span style=color:#66d9ef>RDX</span>,<span style=color:#ae81ff>0x200000005</span>
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>MOV</span>        <span style=color:#66d9ef>RAX</span>,<span style=color:#66d9ef>RCX</span>
@@ -569,13 +568,13 @@ FLAG[3] % 0x00007C49 = 0x000044A9
 </span></span></span><span style=display:flex><span><span style=color:#75715e>; MOV        RCX,qword ptr [RDX]
 </span></span></span><span style=display:flex><span><span style=color:#75715e>; MOV        RDX,qword ptr [RBP + local_20]
 </span></span></span><span style=display:flex><span><span style=color:#75715e>; MOV        EDX,dword ptr [RDX + 0x38]
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#a6e22e>MOVSXD</span>     <span style=color:#66d9ef>RDX</span>,<span style=color:#66d9ef>EDX</span>
+</span></span></span><span style=display:flex><span>  <span style=color:#a6e22e>MOVSXD</span>     <span style=color:#66d9ef>RDX</span>,<span style=color:#66d9ef>EDX</span>
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>SHL</span>        <span style=color:#66d9ef>RDX</span>,<span style=color:#ae81ff>0x2</span>
 </span></span><span style=display:flex><span>  <span style=color:#a6e22e>ADD</span>        <span style=color:#66d9ef>RDX</span>,<span style=color:#66d9ef>RCX</span>
 </span></span><span style=display:flex><span><span style=color:#75715e>; MOV        dword ptr [RDX],EAX
 </span></span></span><span style=display:flex><span><span style=color:#75715e>; NOP
 </span></span></span><span style=display:flex><span><span style=color:#75715e>; POP        RBP
-</span></span></span><span style=display:flex><span><span style=color:#75715e></span>  <span style=color:#a6e22e>RET</span>
+</span></span></span><span style=display:flex><span>  <span style=color:#a6e22e>RET</span>
 </span></span></code></pre></div><p>Cela prend environ une dizaine de secondes sur ma machine. On obtient alors les 4 ints qui composent le flag :</p><pre tabindex=0><code>654E3377
 ==
 30546445
@@ -586,4 +585,4 @@ FLAG[3] % 0x00007C49 = 0x000044A9
 37F787E8
 72337033
 </code></pre><p>En éliminant les résultats qui possèdent des caractères non imprimables et en rétablissant l&rsquo;endianness, on obtient :</p><pre tabindex=0><code>FCSC{w3NeEdT0gODe3p3r}
-</code></pre></main><hr><footer>© 2020 - 2025 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
+</code></pre></main><hr><footer>© 2020 - 2026 redoste - <a href=https://creativecommons.org/licenses/by/4.0/>CC-BY-4.0</a></footer></body></html>
