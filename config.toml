@@ -15,6 +15,9 @@ enableRobotsTXT = true
 	term = ["HTML"]
 	section = ["HTML", "RSS"]
 
+[taxonomies]
+	tag = 'tags'
+
 [permalinks]
 	posts = "/:year/:month/:day/:title/"
 
